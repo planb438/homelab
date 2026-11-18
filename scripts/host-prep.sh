@@ -46,6 +46,9 @@ if ! command -v terraform >/dev/null; then
   sudo apt-get update && sudo apt-get install -y terraform
 fi
 
+echo "== 5b kubectl on the host (matches the cluster's minor version)"
+command -v kubectl >/dev/null || sudo snap install kubectl --classic --channel=1.34/stable
+
 echo "== 6/6 Ansible collections + SSH key"
 ansible-galaxy collection install -r "$REPO_DIR/ansible/requirements.yml"
 [ -f ~/.ssh/id_ed25519.pub ] || ssh-keygen -t ed25519 -N "" -f ~/.ssh/id_ed25519

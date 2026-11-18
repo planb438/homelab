@@ -36,11 +36,12 @@ groups | grep libvirt && virsh -c qemu:///system list --all
 cd infra/libvirt && terraform init && terraform apply      # needs ~/.ssh/id_ed25519.pub
 
 # 2. Kubernetes
-cd ../../ansible && ansible-playbook -i inventory/lab.ini site.yml
-export KUBECONFIG=$PWD/kubeconfig-lab
+cd ../../ansible && ansible-playbook site.yml
+cd .. && export KUBECONFIG=$PWD/ansible/kubeconfig-lab   # add this line to ~/.bashrc
+kubectl get nodes
 
 # 3. GitOps
-bash ../scripts/bootstrap-argocd.sh
+bash scripts/bootstrap-argocd.sh
 ```
 
 ## Day to day
@@ -72,6 +73,7 @@ See `docs/aws.md`. Keep `apps/` and `policies/` as they are; add `clusters/eks` 
 |---|---|
 | `scripts/...: Permission denied` | run with `bash scripts/<name>.sh`, as your user (not `sudo bash`) |
 | `Package 'qemu-kvm' has no installation candidate` | fixed in host-prep (installs `qemu-system-x86`) |
+| `kubectl: command not found` | `sudo snap install kubectl --classic --channel=1.34/stable` (host-prep now does this) |
 | `libvirt-sock: permission denied` | log out/in after host-prep; `newgrp libvirt` works for one terminal |
 | `NO_PUBKEY FC9CA96ACA026560` (Terraform) | key must come from `https://apt.releases.hashicorp.com/gpg` — host-prep does this |
 | `Could not open ...ubuntu-noble-base.qcow2: Permission denied` | AppArmor; host-prep sets `security_driver = "none"` in `/etc/libvirt/qemu.conf` and restarts libvirt |
