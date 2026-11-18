@@ -1,0 +1,34 @@
+apiVersion: kyverno.io/v1
+kind: Policy
+metadata:
+  name: image-rules
+spec:
+  background: true
+  rules:
+    - name: no-latest-tag
+      match: {any: [{resources: {kinds: [Pod]}}]}
+      validate:
+        failureAction: Enforce
+        message: "Pin an image version; ':latest' or no tag is not allowed."
+        pattern:
+          spec:
+            containers:
+              - image: "*:* & !*:latest"
+    - name: allowed-registries
+      match: {any: [{resources: {kinds: [Pod]}}]}
+      validate:
+        failureAction: Enforce
+        message: "Images must come from ghcr.io, registry.k8s.io, quay.io or docker.io/nginxinc."
+        pattern:
+          spec:
+            containers:
+              - image: "ghcr.io/* | registry.k8s.io/* | quay.io/* | nginxinc/* | docker.io/nginxinc/*"
+    - name: prefer-digest
+      match: {any: [{resources: {kinds: [Pod]}}]}
+      validate:
+        failureAction: Audit          # report only — next step is Enforce + cosign verifyImages
+        message: "Production images should be pinned by digest (@sha256:...)."
+        pattern:
+          spec:
+            containers:
+              - image: "*@sha256:*"

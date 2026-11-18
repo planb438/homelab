@@ -1,0 +1,9 @@
+apiVersion: v1
+kind: Pod
+metadata: {name: uses-latest, namespace: lab-06-supply-chain}
+spec:
+  securityContext: {runAsNonRoot: true, runAsUser: 101, seccompProfile: {type: RuntimeDefault}}
+  containers:
+    - name: c
+      image: nginxinc/nginx-unprivileged:latest
+      securityContext: {allowPrivilegeEscalation: false, capabilities: {drop: [ALL]}}

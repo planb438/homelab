@@ -1,0 +1,9 @@
+apiVersion: v1
+kind: Pod
+metadata: {name: random-registry, namespace: lab-06-supply-chain}
+spec:
+  securityContext: {runAsNonRoot: true, runAsUser: 1000, seccompProfile: {type: RuntimeDefault}}
+  containers:
+    - name: c
+      image: docker.io/someone/miner:1.0
+      securityContext: {allowPrivilegeEscalation: false, capabilities: {drop: [ALL]}}

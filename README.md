@@ -1,6 +1,8 @@
 # homelab — lab → dev / stage / prod with GitOps
 
-**Last updated: 2026-11-18** · Status: cluster builds end-to-end on Ubuntu 26.04 (tested by Adari, Nov 18 2026)
+**Last updated: 2026-11-18** · Status: cluster builds end-to-end on Ubuntu 26.04 (tested by Adari, Nov 18 2026) · Argo CD UI working via Traefik
+
+**Docs:** [Platform components (what / why / settings / AWS)](docs/components.md) · [Labs](labs/README.md) · [AWS plan](docs/aws.md) · Tracking: Homelab HQ (Google Sheet, CloudKanata Drive)
 
 One laptop, one Kubernetes cluster in VMs, three environments, everything rebuilt from this repo.
 Built so the **same app manifests move to AWS EKS later** — only the cluster layer changes.
@@ -52,6 +54,8 @@ bash scripts/bootstrap-argocd.sh
 | `scripts/lab.sh snapshot clean` | snapshot all 3 VMs |
 | `scripts/lab.sh revert clean` | roll back after a CKS lab |
 | `scripts/lab.sh stop` / `start` | give the RAM back to your desktop |
+| `bash scripts/versions.sh` | live versions of everything (paste into Homelab HQ) |
+| `for t in labs/*/tests/test.sh; do bash $t; done` | run every lab test (PASS/FAIL) |
 | `bash scripts/reset-lab.sh` | delete the 3 VMs + disks and start over |
 | PR to `main` | CI validates Terraform + every overlay; merge = Argo CD deploys |
 
@@ -63,7 +67,7 @@ Change `dev` → PR → merge → check → copy the same change to `stage`, the
 Traefik gets an IP from MetalLB. Point the lab names at it once:
 ```bash
 IP=$(kubectl -n traefik get svc traefik -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
-echo "$IP argocd.lab.local podinfo.dev.lab.local podinfo.stage.lab.local podinfo.prod.lab.local" | sudo tee -a /etc/hosts
+echo "$IP argocd.lab.local hello.lab.local podinfo.dev.lab.local podinfo.stage.lab.local podinfo.prod.lab.local" | sudo tee -a /etc/hosts
 ```
 - Argo CD: https://argocd.lab.local (user `admin`; self-signed cert, so accept the browser warning)
 - Apps: http://podinfo.dev.lab.local, `.stage.`, `.prod.`
@@ -107,7 +111,10 @@ then `bootstrap-argocd.sh` once. From that point **Argo CD installs everything e
 | cert-manager | TLS certificates |
 | metrics-server | `kubectl top`, autoscaling |
 | Kyverno + `policies/` (Audit) | guardrails: resources set, no privileged pods |
+| Sealed Secrets | encrypted Secrets you can commit |
+| lab CA (`platform/cert-issuers`) | HTTPS certificates for `*.lab.local` |
 | every `apps/<app>/overlays/<env>` | your apps in `dev`, `stage`, `prod` |
+| every `labs/<NN-name>` | security labs, each in namespace `lab-<NN-name>` |
 
 Never `kubectl apply` apps by hand — change Git, and Argo CD makes the cluster match (it also undoes manual edits).
 
@@ -146,6 +153,7 @@ and thanks to this repo, moving it there is a new `clusters/eks` folder, not a r
 ## Changelog
 | Date | Change |
 |---|---|
+| 2026-11-18 (eve) | Labs 01–06 (pod security, network policy, sealed secrets, ingress+TLS, RBAC, supply chain) rebuilt from old repos; Sealed Secrets + lab CA; `docs/components.md`; `scripts/versions.sh`; old repos tagged `backup-2026-11-18` |
 | 2026-11-18 (pm) | Argo CD UI at https://argocd.lab.local via Traefik (TLS passthrough); podinfo UID fix; Traefik chart pinned to 42.4.1 |
 | 2026-11-18 | Fresh-install fixes for Ubuntu 26.04 (qemu-system-x86, AppArmor, Terraform repo, kubectl on host); `reset-lab.sh`; bootstrap finds the kubeconfig itself; deploy guide + production-readiness notes |
 | 2026-11-17 | Initial repo: libvirt VMs (Terraform), kubeadm (Ansible), Argo CD app-of-apps, dev/stage/prod overlays, Kyverno, CI |

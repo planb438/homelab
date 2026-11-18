@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: Pod
+metadata: {name: bad-hostpath, namespace: lab-01-pod-security}
+spec:
+  hostNetwork: true
+  containers:
+    - name: c
+      image: busybox:1.36.1
+      command: ["sleep","3600"]
+      volumeMounts: [{name: host, mountPath: /host}]
+  volumes: [{name: host, hostPath: {path: /}}]

@@ -1,0 +1,34 @@
+# One Argo CD app per labs/<NN-name>  →  its own namespace lab-<NN-name> (defined inside the lab).
+# Turn a lab off: delete or rename its folder (e.g. prefix with "_") and merge.
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: labs
+  namespace: argocd
+spec:
+  goTemplate: true
+  goTemplateOptions: ["missingkey=error"]
+  generators:
+    - git:
+        repoURL: https://github.com/planb438/homelab.git
+        revision: HEAD
+        directories:
+          - path: labs/[0-9]*
+  template:
+    metadata:
+      name: 'lab-{{.path.basename}}'
+      annotations:
+        argocd.argoproj.io/sync-wave: "2"
+    spec:
+      project: default
+      source:
+        repoURL: https://github.com/planb438/homelab.git
+        targetRevision: HEAD
+        path: '{{.path.path}}'
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: 'lab-{{.path.basename}}'
+      syncPolicy:
+        automated: {prune: true, selfHeal: true}
+        syncOptions: [SkipDryRunOnMissingResource=true]
+        retry: {limit: 5, backoff: {duration: 30s, maxDuration: 5m}}

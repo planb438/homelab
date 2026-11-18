@@ -1,0 +1,17 @@
+# Kyverno (namespaced Policy): NodePort and hostPort are refused in this namespace.
+apiVersion: kyverno.io/v1
+kind: Policy
+metadata:
+  name: no-nodeport
+spec:
+  background: true
+  rules:
+    - name: block-nodeport
+      match:
+        any: [{resources: {kinds: [Service]}}]
+      validate:
+        failureAction: Enforce
+        message: "NodePort is not allowed here. Use a ClusterIP Service + Ingress (Traefik)."
+        pattern:
+          spec:
+            =(type): "!NodePort"

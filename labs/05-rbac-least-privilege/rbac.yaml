@@ -1,0 +1,29 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata: {name: app}
+automountServiceAccountToken: false      # pods get no API token unless they ask for one
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata: {name: config-reader}
+---
+# Read ONE named ConfigMap — nothing else.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata: {name: read-app-config}
+rules:
+  - apiGroups: [""]
+    resources: [configmaps]
+    resourceNames: [app-config]
+    verbs: [get]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata: {name: config-reader-read-app-config}
+roleRef: {apiGroup: rbac.authorization.k8s.io, kind: Role, name: read-app-config}
+subjects: [{kind: ServiceAccount, name: config-reader}]
+---
+apiVersion: v1
+kind: ConfigMap
+metadata: {name: app-config}
+data: {LOG_LEVEL: info}

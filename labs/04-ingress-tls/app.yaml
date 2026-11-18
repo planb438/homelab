@@ -1,0 +1,70 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hello
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: hello}
+  template:
+    metadata:
+      labels: {app: hello}
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: whoami
+          image: traefik/whoami:v1.11.0
+          args: ["--port", "8080"]
+          ports: [{name: http, containerPort: 8080}]
+          readinessProbe: {httpGet: {path: /health, port: http}}
+          resources:
+            requests: {cpu: 5m, memory: 8Mi}
+            limits: {memory: 32Mi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: [ALL]}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: hello
+spec:
+  type: ClusterIP          # never NodePort: nothing is exposed on the nodes
+  selector: {app: hello}
+  ports: [{name: http, port: 80, targetPort: http}]
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: hello
+  annotations:
+    cert-manager.io/cluster-issuer: lab-ca
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts: [hello.lab.local]
+      secretName: hello-tls
+  rules:
+    - host: hello.lab.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend: {service: {name: hello, port: {number: 80}}}
+---
+# Only Traefik may reach the app.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: {name: hello-allow-from-traefik}
+spec:
+  podSelector: {matchLabels: {app: hello}}
+  policyTypes: [Ingress]
+  ingress:
+    - from: [{namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: traefik}}}]
+      ports: [{protocol: TCP, port: 8080}]

@@ -28,11 +28,13 @@ jobs:
       - name: Render and validate every overlay
         run: |
           set -e
-          for d in apps/*/overlays/* platform/local-path; do
+          for d in apps/*/overlays/* labs/[0-9]* platform/local-path platform/cert-issuers platform/argocd-ingress policies/kyverno; do
             echo "::group::$d"
             kubectl kustomize "$d" | kubeconform -strict -ignore-missing-schemas -summary
             echo "::endgroup::"
           done
+      - name: Lab test scripts parse
+        run: for f in labs/*/tests/test.sh scripts/*.sh; do bash -n "$f"; done
   ansible:
     runs-on: ubuntu-latest
     steps:

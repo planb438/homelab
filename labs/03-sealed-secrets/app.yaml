@@ -1,0 +1,35 @@
+# Reads DB_PASSWORD from the Secret "app-credentials". That Secret only exists in Git as a SealedSecret
+# (encrypted). Until you add sealedsecret.yaml (README step 2) the app logs "secret: missing".
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: app
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: app}
+  template:
+    metadata:
+      labels: {app: app}
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: app
+          image: busybox:1.36.1
+          command: ["sh","-c","while true; do if [ -n \"$DB_PASSWORD\" ]; then echo secret: loaded; else echo secret: missing; fi; sleep 60; done"]
+          env:
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef: {name: app-credentials, key: DB_PASSWORD, optional: true}
+          resources:
+            requests: {cpu: 5m, memory: 8Mi}
+            limits: {memory: 16Mi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: [ALL]}
