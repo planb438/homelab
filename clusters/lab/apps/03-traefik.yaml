@@ -15,7 +15,8 @@ spec:
     helm:
       valuesObject:
         service:
-          type: LoadBalancer
+          spec:
+            type: LoadBalancer   # chart v38+ moved this under service.spec
         ingressClass:
           enabled: true
           isDefaultClass: true

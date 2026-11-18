@@ -92,7 +92,7 @@ See `docs/aws.md`. Keep `apps/` and `policies/` as they are; add `clusters/eks` 
 | `libvirt-sock: permission denied` | log out/in after host-prep; `newgrp libvirt` works for one terminal |
 | `NO_PUBKEY FC9CA96ACA026560` (Terraform) | key must come from `https://apt.releases.hashicorp.com/gpg` — host-prep does this |
 | podinfo `CreateContainerConfigError` | image user is non-numeric; fixed by `runAsUser: 100` in `apps/podinfo/base` |
-| `traefik` namespace empty / no ingress IP | `kubectl -n argocd get applications`, then `kubectl -n argocd describe application traefik`; chart is now pinned to 42.4.1 |
+| `traefik` namespace empty / no ingress IP | `kubectl -n argocd get applications`, then `kubectl -n argocd describe application traefik`; chart pinned to 42.4.1; chart v38+ wants `service.spec.type`, not `service.type` (schema error) |
 | `Could not open ...ubuntu-noble-base.qcow2: Permission denied` | AppArmor; host-prep sets `security_driver = "none"` in `/etc/libvirt/qemu.conf` and restarts libvirt |
 
 ## What you install vs. what Argo CD installs
