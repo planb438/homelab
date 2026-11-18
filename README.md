@@ -1,5 +1,7 @@
 # homelab — lab → dev / stage / prod with GitOps
 
+**Last updated: 2026-11-18** · Status: cluster builds end-to-end on Ubuntu 26.04 (tested by Adari, Nov 18 2026)
+
 One laptop, one Kubernetes cluster in VMs, three environments, everything rebuilt from this repo.
 Built so the **same app manifests move to AWS EKS later** — only the cluster layer changes.
 
@@ -77,3 +79,57 @@ See `docs/aws.md`. Keep `apps/` and `policies/` as they are; add `clusters/eks` 
 | `libvirt-sock: permission denied` | log out/in after host-prep; `newgrp libvirt` works for one terminal |
 | `NO_PUBKEY FC9CA96ACA026560` (Terraform) | key must come from `https://apt.releases.hashicorp.com/gpg` — host-prep does this |
 | `Could not open ...ubuntu-noble-base.qcow2: Permission denied` | AppArmor; host-prep sets `security_driver = "none"` in `/etc/libvirt/qemu.conf` and restarts libvirt |
+
+## What you install vs. what Argo CD installs
+You only run **three things by hand**: `host-prep.sh` → `terraform apply` → `ansible-playbook site.yml`,
+then `bootstrap-argocd.sh` once. From that point **Argo CD installs everything else from this repo**:
+
+| Installed automatically (in order) | Why |
+|---|---|
+| local-path storage (default StorageClass) | PVCs bind instead of staying *Pending* |
+| MetalLB (192.168.122.240-250) | `LoadBalancer` services get an IP |
+| Traefik | ingress / HTTP routing |
+| cert-manager | TLS certificates |
+| metrics-server | `kubectl top`, autoscaling |
+| Kyverno + `policies/` (Audit) | guardrails: resources set, no privileged pods |
+| every `apps/<app>/overlays/<env>` | your apps in `dev`, `stage`, `prod` |
+
+Never `kubectl apply` apps by hand — change Git, and Argo CD makes the cluster match (it also undoes manual edits).
+
+## How to deploy an app
+```bash
+git checkout -b add-wikijs
+mkdir -p apps/wikijs/base apps/wikijs/overlays/{dev,prod}
+# base/: Deployment, Service, PVC (no storageClassName), resources requests + memory limit
+# overlays/<env>/kustomization.yaml: resources: [../../base] + what differs (replicas, host, image tag)
+kubectl kustomize apps/wikijs/overlays/dev          # check it renders
+git add apps/wikijs && git commit -m "wikijs: base + dev/prod" && git push -u origin add-wikijs
+# open a PR → CI must pass → merge to main
+```
+Within ~3 minutes Argo CD creates **wikijs-dev** and **wikijs-prod** (namespaces `dev`, `prod`). Watch it:
+`kubectl get applications -n argocd` or the UI (`kubectl -n argocd port-forward svc/argocd-server 8080:443`).
+
+**Promote** dev → prod: make the same change in `overlays/prod` in a second PR.
+**Remove** an environment: delete its overlay folder and merge — Argo CD deletes it from the cluster.
+**Copy the pattern** from `apps/podinfo/`. Bring apps over from `argocd-applications-homelab` one at a time (`docs/migrating-apps.md`).
+
+## Is this production-ready?
+**The workflow is production-grade; this hardware is not.** It is the right place for dev, stage, demos,
+CKS labs and your own low-stakes tools. Do not put clients' data here yet.
+
+| Production-grade already | Gap on this laptop | Fix (in order) |
+|---|---|---|
+| GitOps: every change reviewed, versioned, reversible | 1 control plane — if cp1 dies, the cluster can't be managed | 3 control planes, or EKS (managed control plane) |
+| CI validates every PR | local-path storage: data lives on one worker; lose w1 = lose its volumes | Velero + MinIO backups **copied off the laptop**; later Longhorn or EBS (gp3) |
+| Policies (Kyverno), NetworkPolicy (Calico) | 11 GB RAM, laptop CPU, home power & internet | a VPS or EKS for real prod |
+| Rebuild from scratch in ~20 min | private NAT network — not reachable from the internet | Cloudflare Tunnel for safe public access |
+| Snapshots / reset scripts | no monitoring or alerts yet | Prometheus + Grafana + alerting (prod overlay only) |
+
+**Rule of thumb:** if losing the data for a day would hurt a client, it belongs on EKS or a VPS with backups —
+and thanks to this repo, moving it there is a new `clusters/eks` folder, not a rewrite (`docs/aws.md`).
+
+## Changelog
+| Date | Change |
+|---|---|
+| 2026-11-18 | Fresh-install fixes for Ubuntu 26.04 (qemu-system-x86, AppArmor, Terraform repo, kubectl on host); `reset-lab.sh`; bootstrap finds the kubeconfig itself; deploy guide + production-readiness notes |
+| 2026-11-17 | Initial repo: libvirt VMs (Terraform), kubeadm (Ansible), Argo CD app-of-apps, dev/stage/prod overlays, Kyverno, CI |
