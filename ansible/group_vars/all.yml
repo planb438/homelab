@@ -1,0 +1,4 @@
+# Check https://kubernetes.io/releases/ and https://github.com/projectcalico/calico/releases before building.
+k8s_minor: "v1.34"            # pkgs.k8s.io repo channel
+calico_version: "v3.30.3"
+pod_cidr: "192.168.0.0/16"

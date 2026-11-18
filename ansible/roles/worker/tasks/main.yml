@@ -1,0 +1,4 @@
+- name: Join the cluster
+  ansible.builtin.command: "{{ hostvars[groups['control_plane'][0]].k8s_join }} --node-name={{ inventory_hostname }}"
+  args:
+    creates: /etc/kubernetes/kubelet.conf

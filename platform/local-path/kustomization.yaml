@@ -1,0 +1,14 @@
+# Default StorageClass so PVCs bind (fixes "Pending" volumes). On EKS use gp3 instead.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - https://raw.githubusercontent.com/rancher/local-path-provisioner/v0.0.31/deploy/local-path-storage.yaml
+patches:
+  - target:
+      kind: StorageClass
+      name: local-path
+    patch: |-
+      - op: add
+        path: /metadata/annotations
+        value:
+          storageclass.kubernetes.io/is-default-class: "true"

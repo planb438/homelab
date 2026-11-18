@@ -1,0 +1,38 @@
+- name: kubeadm init
+  ansible.builtin.command: >
+    kubeadm init
+    --apiserver-advertise-address={{ ansible_host }}
+    --pod-network-cidr={{ pod_cidr }}
+    --node-name={{ inventory_hostname }}
+  args:
+    creates: /etc/kubernetes/admin.conf
+
+- name: kubeconfig for ubuntu user
+  ansible.builtin.shell: |
+    mkdir -p /home/ubuntu/.kube
+    cp /etc/kubernetes/admin.conf /home/ubuntu/.kube/config
+    chown -R ubuntu:ubuntu /home/ubuntu/.kube
+  args:
+    creates: /home/ubuntu/.kube/config
+
+- name: Calico CNI
+  become: false
+  ansible.builtin.command: >
+    kubectl apply -f https://raw.githubusercontent.com/projectcalico/calico/{{ calico_version }}/manifests/calico.yaml
+  register: calico
+  changed_when: "'created' in calico.stdout"
+
+- name: Join command for workers
+  ansible.builtin.command: kubeadm token create --print-join-command
+  register: join_cmd
+  changed_when: false
+
+- name: Save join command
+  ansible.builtin.set_fact:
+    k8s_join: "{{ join_cmd.stdout }}"
+
+- name: Copy kubeconfig to the host (ansible/kubeconfig-lab)
+  ansible.builtin.fetch:
+    src: /etc/kubernetes/admin.conf
+    dest: "{{ playbook_dir }}/kubeconfig-lab"
+    flat: true

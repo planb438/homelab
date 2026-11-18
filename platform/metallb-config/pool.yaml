@@ -1,0 +1,17 @@
+# LoadBalancer IPs on the libvirt NAT network. scripts/host-prep.sh shrinks DHCP to .100-.199 so .10-.99 (nodes) and .240-.250 (here) stay free.
+apiVersion: metallb.io/v1beta1
+kind: IPAddressPool
+metadata:
+  name: lab-pool
+  namespace: metallb-system
+spec:
+  addresses:
+    - 192.168.122.240-192.168.122.250
+---
+apiVersion: metallb.io/v1beta1
+kind: L2Advertisement
+metadata:
+  name: lab-l2
+  namespace: metallb-system
+spec:
+  ipAddressPools: [lab-pool]

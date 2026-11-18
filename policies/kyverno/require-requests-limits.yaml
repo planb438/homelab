@@ -1,0 +1,27 @@
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: require-requests-limits
+  annotations:
+    policies.kyverno.io/description: Every container sets CPU/memory requests and a memory limit (matters on an 11 GB cluster).
+spec:
+  validationFailureAction: Audit   # switch to Enforce once apps comply
+  background: true
+  rules:
+    - name: check-resources
+      match:
+        any:
+          - resources:
+              kinds: [Pod]
+              namespaces: [dev, stage, prod]
+      validate:
+        message: "Set resources.requests.cpu, resources.requests.memory and resources.limits.memory."
+        pattern:
+          spec:
+            containers:
+              - resources:
+                  requests:
+                    memory: "?*"
+                    cpu: "?*"
+                  limits:
+                    memory: "?*"

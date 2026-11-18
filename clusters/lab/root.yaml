@@ -1,0 +1,19 @@
+# App of apps: everything under clusters/lab/apps is managed by Argo CD.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: root-lab
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/planb438/homelab.git
+    targetRevision: HEAD
+    path: clusters/lab/apps
+    directory:
+      recurse: true
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  syncPolicy:
+    automated: {prune: true, selfHeal: true}
