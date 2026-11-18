@@ -27,8 +27,10 @@ Host (Ubuntu desktop, i5-8265U 4c/8t, 18 GB RAM)
 
 ## Quick start
 ```bash
-# 0. host prep (once) — KVM, libvirt pool, DHCP range, Ansible collections, SSH key
-scripts/host-prep.sh            # then log out/in; install Terraform: https://developer.hashicorp.com/terraform/install
+# 0. host prep (once, as YOUR user — not root): KVM, libvirt, AppArmor fix, Terraform, Ansible, SSH key
+bash scripts/host-prep.sh
+# >>> log out and back in (or reboot) so the libvirt group applies, then check:
+groups | grep libvirt && virsh -c qemu:///system list --all
 
 # 1. VMs
 cd infra/libvirt && terraform init && terraform apply      # needs ~/.ssh/id_ed25519.pub
@@ -38,7 +40,7 @@ cd ../../ansible && ansible-playbook -i inventory/lab.ini site.yml
 export KUBECONFIG=$PWD/kubeconfig-lab
 
 # 3. GitOps
-../scripts/bootstrap-argocd.sh
+bash ../scripts/bootstrap-argocd.sh
 ```
 
 ## Day to day
@@ -47,6 +49,7 @@ export KUBECONFIG=$PWD/kubeconfig-lab
 | `scripts/lab.sh snapshot clean` | snapshot all 3 VMs |
 | `scripts/lab.sh revert clean` | roll back after a CKS lab |
 | `scripts/lab.sh stop` / `start` | give the RAM back to your desktop |
+| `bash scripts/reset-lab.sh` | delete the 3 VMs + disks and start over |
 | PR to `main` | CI validates Terraform + every overlay; merge = Argo CD deploys |
 
 ## Promotion flow
@@ -63,3 +66,12 @@ See `docs/aws.md`. Keep `apps/` and `policies/` as they are; add `clusters/eks` 
 * `EKS-Terraform-Lab` — course notes / Terraform modules for the AWS phase
 
 **No secrets in this repo.** Use SOPS + age or Sealed Secrets when an app needs one.
+
+## Troubleshooting (Ubuntu 26.04)
+| Error | Fix |
+|---|---|
+| `scripts/...: Permission denied` | run with `bash scripts/<name>.sh`, as your user (not `sudo bash`) |
+| `Package 'qemu-kvm' has no installation candidate` | fixed in host-prep (installs `qemu-system-x86`) |
+| `libvirt-sock: permission denied` | log out/in after host-prep; `newgrp libvirt` works for one terminal |
+| `NO_PUBKEY FC9CA96ACA026560` (Terraform) | key must come from `https://apt.releases.hashicorp.com/gpg` — host-prep does this |
+| `Could not open ...ubuntu-noble-base.qcow2: Permission denied` | AppArmor; host-prep sets `security_driver = "none"` in `/etc/libvirt/qemu.conf` and restarts libvirt |
