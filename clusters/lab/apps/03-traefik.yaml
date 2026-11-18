@@ -11,7 +11,7 @@ spec:
   source:
     repoURL: https://traefik.github.io/charts
     chart: traefik
-    targetRevision: "*"   # Renovate pins this to an exact version
+    targetRevision: 42.4.1   # Renovate bumps this
     helm:
       valuesObject:
         service:

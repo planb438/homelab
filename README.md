@@ -59,6 +59,19 @@ bash scripts/bootstrap-argocd.sh
 `apps/<app>/base` is shared. Overlays only change what differs (replicas, resources, image tag, host).
 Change `dev` → PR → merge → check → copy the same change to `stage`, then `prod`.
 
+## Opening Argo CD and the apps (through Traefik)
+Traefik gets an IP from MetalLB. Point the lab names at it once:
+```bash
+IP=$(kubectl -n traefik get svc traefik -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+echo "$IP argocd.lab.local podinfo.dev.lab.local podinfo.stage.lab.local podinfo.prod.lab.local" | sudo tee -a /etc/hosts
+```
+- Argo CD: https://argocd.lab.local (user `admin`; self-signed cert, so accept the browser warning)
+- Apps: http://podinfo.dev.lab.local, `.stage.`, `.prod.`
+- Fallback if Traefik is down: `kubectl -n argocd port-forward svc/argocd-server 8080:443` → https://localhost:8080
+
+Argo CD is routed with an `IngressRouteTCP` in TLS passthrough (`platform/argocd-ingress/`), so Argo CD needs no config change.
+New app = add an `Ingress` with `ingressClassName: traefik` and a host, then add that host to `/etc/hosts`.
+
 ## Moving to AWS later
 See `docs/aws.md`. Keep `apps/` and `policies/` as they are; add `clusters/eks` and `infra/aws`
 (reuse your `EKS-Terraform-Lab` modules: VPC, EKS, IRSA, EBS CSI).
@@ -78,6 +91,8 @@ See `docs/aws.md`. Keep `apps/` and `policies/` as they are; add `clusters/eks` 
 | `kubectl: command not found` | `sudo snap install kubectl --classic --channel=1.34/stable` (host-prep now does this) |
 | `libvirt-sock: permission denied` | log out/in after host-prep; `newgrp libvirt` works for one terminal |
 | `NO_PUBKEY FC9CA96ACA026560` (Terraform) | key must come from `https://apt.releases.hashicorp.com/gpg` — host-prep does this |
+| podinfo `CreateContainerConfigError` | image user is non-numeric; fixed by `runAsUser: 100` in `apps/podinfo/base` |
+| `traefik` namespace empty / no ingress IP | `kubectl -n argocd get applications`, then `kubectl -n argocd describe application traefik`; chart is now pinned to 42.4.1 |
 | `Could not open ...ubuntu-noble-base.qcow2: Permission denied` | AppArmor; host-prep sets `security_driver = "none"` in `/etc/libvirt/qemu.conf` and restarts libvirt |
 
 ## What you install vs. what Argo CD installs
@@ -131,5 +146,6 @@ and thanks to this repo, moving it there is a new `clusters/eks` folder, not a r
 ## Changelog
 | Date | Change |
 |---|---|
+| 2026-11-18 (pm) | Argo CD UI at https://argocd.lab.local via Traefik (TLS passthrough); podinfo UID fix; Traefik chart pinned to 42.4.1 |
 | 2026-11-18 | Fresh-install fixes for Ubuntu 26.04 (qemu-system-x86, AppArmor, Terraform repo, kubectl on host); `reset-lab.sh`; bootstrap finds the kubeconfig itself; deploy guide + production-readiness notes |
 | 2026-11-17 | Initial repo: libvirt VMs (Terraform), kubeadm (Ansible), Argo CD app-of-apps, dev/stage/prod overlays, Kyverno, CI |

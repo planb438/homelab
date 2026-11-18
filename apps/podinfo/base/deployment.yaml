@@ -10,6 +10,8 @@ spec:
     spec:
       securityContext:
         runAsNonRoot: true
+        runAsUser: 100    # image's 'app' user is non-numeric, so kubelet needs the UID
+        runAsGroup: 101
         seccompProfile: {type: RuntimeDefault}
       containers:
         - name: podinfo
