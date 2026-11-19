@@ -4,4 +4,4 @@ resources:
   - namespace.yaml
   - app.yaml
 # After README step 2, add:
-#  - sealedsecret.yaml
+  - sealedsecret.yaml
