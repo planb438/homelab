@@ -1,0 +1,80 @@
+# Cluster monitoring: Prometheus (metrics, 7 days) + Grafana (dashboards) + Alertmanager.
+# Trimmed for an 18 GB desktop: ~1 GB RAM total. Grafana at https://grafana.lab.local
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: monitoring
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+  finalizers: [resources-finalizer.argocd.argoproj.io]
+spec:
+  project: default
+  sources:
+    - repoURL: https://prometheus-community.github.io/helm-charts
+      chart: kube-prometheus-stack
+      targetRevision: 93.4.1          # Renovate bumps this
+      helm:
+        valuesObject:
+          # kubeadm binds these to 127.0.0.1 on cp1, so scraping them only produces false alerts
+          kubeEtcd: {enabled: false}
+          kubeScheduler: {enabled: false}
+          kubeControllerManager: {enabled: false}
+          kubeProxy: {enabled: false}
+          defaultRules:
+            rules: {etcd: false, kubeSchedulerAlerting: false, kubeSchedulerRecording: false, kubeControllerManager: false, kubeProxy: false}
+          prometheus:
+            prometheusSpec:
+              retention: 7d
+              retentionSize: 8GB
+              serviceMonitorSelectorNilUsesHelmValues: false   # scrape every ServiceMonitor, incl. your apps
+              podMonitorSelectorNilUsesHelmValues: false
+              ruleSelectorNilUsesHelmValues: false
+              resources:
+                requests: {cpu: 100m, memory: 400Mi}
+                limits: {memory: 1Gi}
+              storageSpec:
+                volumeClaimTemplate:
+                  spec:
+                    accessModes: [ReadWriteOnce]
+                    resources: {requests: {storage: 10Gi}}
+          alertmanager:
+            alertmanagerSpec:
+              resources:
+                requests: {cpu: 10m, memory: 32Mi}
+                limits: {memory: 128Mi}
+          prometheusOperator:
+            resources:
+              requests: {cpu: 20m, memory: 64Mi}
+              limits: {memory: 256Mi}
+          kube-state-metrics:
+            resources:
+              requests: {cpu: 10m, memory: 48Mi}
+              limits: {memory: 192Mi}
+          prometheus-node-exporter:
+            resources:
+              requests: {cpu: 10m, memory: 24Mi}
+              limits: {memory: 64Mi}
+          grafana:
+            admin:
+              existingSecret: grafana-admin      # SealedSecret in platform/monitoring
+              userKey: admin-user
+              passwordKey: admin-password
+            resources:
+              requests: {cpu: 25m, memory: 128Mi}
+              limits: {memory: 320Mi}
+            ingress:
+              enabled: true
+              ingressClassName: traefik
+              annotations: {cert-manager.io/cluster-issuer: lab-ca}
+              hosts: [grafana.lab.local]
+              tls: [{secretName: grafana-tls, hosts: [grafana.lab.local]}]
+    - repoURL: https://github.com/planb438/homelab.git
+      targetRevision: HEAD
+      path: platform/monitoring
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+  syncPolicy:
+    automated: {prune: true, selfHeal: true}
+    syncOptions: [CreateNamespace=true, ServerSideApply=true]

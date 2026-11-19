@@ -76,6 +76,23 @@ echo "$IP argocd.lab.local hello.lab.local podinfo.dev.lab.local podinfo.stage.l
 Argo CD is routed with an `IngressRouteTCP` in TLS passthrough (`platform/argocd-ingress/`), so Argo CD needs no config change.
 New app = add an `Ingress` with `ingressClassName: traefik` and a host, then add that host to `/etc/hosts`.
 
+## Where everything lives (and how a rebuild works)
+| What | Lives in | Comes back after a rebuild? |
+|---|---|---|
+| Desired state (all YAML) | this GitHub repo | yes — Argo CD re-applies it |
+| Your own app images (civic-hub) | GHCR, built by GitHub Actions | yes — pulled again |
+| Third-party images / charts | their public registries | yes |
+| Encrypted secrets | this repo (SealedSecrets) | only if you restore the **sealing key** first |
+| App data (databases, PVCs) | VM disks | **only from a Velero backup** |
+| VMs + Kubernetes | libvirt, built by Terraform + Ansible | yes — you re-run them (they don't sync anything) |
+
+**Rebuild order:** `terraform apply` → `ansible-playbook site.yml` → `kubectl apply -f sealed-secrets-key.yaml`
+(from your password manager) → `bash scripts/bootstrap-argocd.sh` → wait for Synced →
+`velero restore create --from-backup <latest> --wait` (`docs/aws-velero.md`).
+
+**Optional platform apps** (`clusters/lab/optional/`): monitoring (`bash scripts/setup-monitoring.sh`) and
+Velero backups to S3 (`bash scripts/setup-velero.sh <bucket> <region>`). Each script seals its secret and enables the app.
+
 ## Moving to AWS later
 See `docs/aws.md`. Keep `apps/` and `policies/` as they are; add `clusters/eks` and `infra/aws`
 (reuse your `EKS-Terraform-Lab` modules: VPC, EKS, IRSA, EBS CSI).
@@ -153,6 +170,7 @@ and thanks to this repo, moving it there is a new `clusters/eks` folder, not a r
 ## Changelog
 | Date | Change |
 |---|---|
+| 2026-11-19 (pm) | Optional platform apps: kube-prometheus-stack 93.4.1 (Grafana at grafana.lab.local) and Velero 12.2.5 → S3 nightly; setup scripts; `docs/aws-velero.md`; rebuild/data guide; sealed-secrets Helm URL fixed |
 | 2026-11-19 | Civic Hub v0.1.0 (Ask Canada): Python collectors for IRCC, Canada.ca news, StatCan, Bank of Canada, open.canada.ca → PostgreSQL with change tracking + history; public page; Grafana; image CI to GHCR; `seal-civic-hub.sh` |
 | 2026-11-18 (eve) | Labs 01–06 (pod security, network policy, sealed secrets, ingress+TLS, RBAC, supply chain) rebuilt from old repos; Sealed Secrets + lab CA; `docs/components.md`; `scripts/versions.sh`; old repos tagged `backup-2026-11-18` |
 | 2026-11-18 (pm) | Argo CD UI at https://argocd.lab.local via Traefik (TLS passthrough); podinfo UID fix; Traefik chart pinned to 42.4.1 |

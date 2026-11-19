@@ -94,9 +94,21 @@ clicked together by hand — so the same design can be rebuilt on a laptop, on E
 **Settings:** chart 2.22.0 · controller `sealed-secrets-controller` in `kube-system` · kubeseal 0.41.2 on the desktop.
 **Must do:** back up the sealing key outside Git. **AWS:** External Secrets Operator + Secrets Manager.
 
+## Prometheus + Grafana (kube-prometheus-stack)  ·  `clusters/lab/optional/13-monitoring.yaml`
+**What:** metrics for every node, pod and app, dashboards, alerts. **Why:** you can't run prod without seeing it; same stack most clients run.
+**Settings:** chart 93.4.1 · 7-day retention on a 10 Gi volume · ~1 GB RAM · control-plane scrapers off (kubeadm binds them to localhost) · Grafana admin via SealedSecret · https://grafana.lab.local.
+**AWS:** same chart on EKS, or Amazon Managed Prometheus/Grafana.
+
+## Velero  ·  `clusters/lab/optional/14-velero.yaml`
+**What:** backs up Kubernetes objects **and volume data** to S3; restores namespaces or the whole cluster.
+**Why:** Git rebuilds the apps; only a backup brings back the data. Backups live **off** the cluster (S3), so losing the laptop doesn't lose them.
+**Settings:** chart 12.2.5 (Velero 1.18) · AWS plugin 1.14.4 · file-system backup (node agent, kopia) because local-path can't snapshot · nightly 2:30 AM, kept 30 days · IAM user limited to one bucket · keys sealed.
+**AWS:** same; on EKS use IRSA instead of keys and EBS snapshots.
+
 ---
 
 ## Change log
 | Date | Change |
 |---|---|
+| 2026-11-19 | Monitoring + Velero added (optional, enable with scripts) |
 | 2026-11-18 | Document created; Sealed Secrets and lab CA added; labs 01–06 |
