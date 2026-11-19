@@ -1,0 +1,10 @@
+apiVersion: 1
+datasources:
+  - name: civic-hub
+    uid: civic-hub-pg
+    type: grafana-postgresql-datasource
+    url: civic-hub-db:5432
+    user: grafana_ro
+    isDefault: true
+    jsonData: {database: civic, sslmode: disable, postgresVersion: 1700, timescaledb: false}
+    secureJsonData: {password: $GRAFANA_DB_PASSWORD}

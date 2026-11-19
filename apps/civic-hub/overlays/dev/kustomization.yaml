@@ -1,0 +1,17 @@
+# dev: newest image from main ("edge"), collector every 2 hours.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../../base
+  - ingress.yaml
+  # - sealedsecret.yaml   <- added by: bash scripts/seal-civic-hub.sh dev
+images:
+  - name: ghcr.io/planb438/civic-hub
+    newTag: edge
+patches:
+  - target: {kind: CronJob, name: civic-hub-collector}
+    patch: |-
+      - {op: replace, path: /spec/schedule, value: "7 */2 * * *"}
+  - target: {kind: Deployment, name: civic-hub-web}
+    patch: |-
+      - {op: add, path: /spec/template/spec/containers/0/imagePullPolicy, value: Always}

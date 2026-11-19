@@ -1,0 +1,86 @@
+# Collector (CronJob) + public web page (Deployment). Same image.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: civic-hub-collector
+spec:
+  schedule: "17 */6 * * *"          # every 6 hours, off the hour
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 2
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: 900
+      template:
+        metadata:
+          labels: {app.kubernetes.io/name: civic-hub-collector}
+        spec:
+          restartPolicy: Never
+          automountServiceAccountToken: false
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 10001
+            runAsGroup: 10001
+            seccompProfile: {type: RuntimeDefault}
+          containers:
+            - name: collector
+              image: ghcr.io/planb438/civic-hub:0.1.0
+              command: ["python", "-m", "civic_hub.collect", "--country", "ca"]
+              env:
+                - name: POSTGRES_PASSWORD
+                  valueFrom: {secretKeyRef: {name: civic-hub-secrets, key: POSTGRES_PASSWORD}}
+                - {name: DATABASE_URL, value: "postgresql://civic:$(POSTGRES_PASSWORD)@civic-hub-db:5432/civic"}
+              resources:
+                requests: {cpu: 50m, memory: 96Mi}
+                limits: {memory: 256Mi}
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities: {drop: [ALL]}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: civic-hub-web
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app.kubernetes.io/name: civic-hub-web}
+  template:
+    metadata:
+      labels: {app.kubernetes.io/name: civic-hub-web}
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: web
+          image: ghcr.io/planb438/civic-hub:0.1.0
+          ports: [{name: http, containerPort: 8080}]
+          env:
+            - name: POSTGRES_PASSWORD
+              valueFrom: {secretKeyRef: {name: civic-hub-secrets, key: POSTGRES_PASSWORD}}
+            - {name: DATABASE_URL, value: "postgresql://civic:$(POSTGRES_PASSWORD)@civic-hub-db:5432/civic"}
+            - {name: SITE_TITLE, value: "Ask Canada — Government Updates Tracker"}
+            - {name: IRCC_COUNTRY, value: "Bahamas"}
+          readinessProbe: {httpGet: {path: /healthz, port: http}, periodSeconds: 10}
+          livenessProbe: {httpGet: {path: /healthz, port: http}, periodSeconds: 30, failureThreshold: 5}
+          resources:
+            requests: {cpu: 20m, memory: 96Mi}
+            limits: {memory: 256Mi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: [ALL]}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: civic-hub-web
+spec:
+  selector: {app.kubernetes.io/name: civic-hub-web}
+  ports: [{name: http, port: 80, targetPort: http}]

@@ -1,0 +1,81 @@
+# PostgreSQL for civic-hub. Data on a PVC (local-path in the lab, gp3 on AWS).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: civic-hub-db-init
+data:
+  10-grafana-readonly.sh: |
+    #!/bin/sh
+    # Read-only role for Grafana: it can SELECT, nothing else.
+    set -e
+    psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<SQL
+    CREATE ROLE grafana_ro LOGIN PASSWORD '${GRAFANA_DB_PASSWORD}';
+    GRANT CONNECT ON DATABASE ${POSTGRES_DB} TO grafana_ro;
+    GRANT USAGE ON SCHEMA public TO grafana_ro;
+    ALTER DEFAULT PRIVILEGES FOR ROLE ${POSTGRES_USER} IN SCHEMA public GRANT SELECT ON TABLES TO grafana_ro;
+    SQL
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: civic-hub-db
+spec:
+  selector: {app.kubernetes.io/name: civic-hub-db}
+  ports: [{name: postgres, port: 5432, targetPort: postgres}]
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: civic-hub-db
+spec:
+  serviceName: civic-hub-db
+  replicas: 1
+  selector:
+    matchLabels: {app.kubernetes.io/name: civic-hub-db}
+  template:
+    metadata:
+      labels: {app.kubernetes.io/name: civic-hub-db}
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 70          # postgres user in the alpine image
+        runAsGroup: 70
+        fsGroup: 70
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: postgres
+          image: postgres:17-alpine
+          ports: [{name: postgres, containerPort: 5432}]
+          env:
+            - {name: POSTGRES_USER, value: civic}
+            - {name: POSTGRES_DB, value: civic}
+            - {name: PGDATA, value: /var/lib/postgresql/data/pgdata}
+            - name: POSTGRES_PASSWORD
+              valueFrom: {secretKeyRef: {name: civic-hub-secrets, key: POSTGRES_PASSWORD}}
+            - name: GRAFANA_DB_PASSWORD
+              valueFrom: {secretKeyRef: {name: civic-hub-secrets, key: GRAFANA_DB_PASSWORD}}
+          readinessProbe:
+            exec: {command: ["pg_isready", "-U", "civic", "-d", "civic"]}
+            periodSeconds: 10
+          resources:
+            requests: {cpu: 50m, memory: 128Mi}
+            limits: {memory: 384Mi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: [ALL]}
+          volumeMounts:
+            - {name: data, mountPath: /var/lib/postgresql/data}
+            - {name: run, mountPath: /var/run/postgresql}
+            - {name: tmp, mountPath: /tmp}
+            - {name: init, mountPath: /docker-entrypoint-initdb.d}
+      volumes:
+        - {name: run, emptyDir: {}}
+        - {name: tmp, emptyDir: {}}
+        - {name: init, configMap: {name: civic-hub-db-init, defaultMode: 0555}}
+  volumeClaimTemplates:
+    - metadata: {name: data}
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources: {requests: {storage: 2Gi}}

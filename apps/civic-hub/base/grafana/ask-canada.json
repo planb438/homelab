@@ -1,0 +1,235 @@
+{
+ "uid": "civic-hub-ca",
+ "title": "Ask Canada \u2014 Civic Hub",
+ "tags": [
+  "civic-hub",
+  "ask-canada"
+ ],
+ "timezone": "browser",
+ "schemaVersion": 39,
+ "time": {
+  "from": "now-30d",
+  "to": "now"
+ },
+ "refresh": "30m",
+ "panels": [
+  {
+   "id": 1,
+   "title": "Collector runs (last 24h)",
+   "type": "stat",
+   "datasource": {
+    "type": "grafana-postgresql-datasource",
+    "uid": "civic-hub-pg"
+   },
+   "gridPos": {
+    "x": 0,
+    "y": 0,
+    "w": 6,
+    "h": 5
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "grafana-postgresql-datasource",
+      "uid": "civic-hub-pg"
+     },
+     "rawQuery": true,
+     "editorMode": "code",
+     "format": "table",
+     "rawSql": "SELECT count(*) FILTER (WHERE ok) AS ok, count(*) FILTER (WHERE NOT ok) AS failed FROM runs WHERE started_at > now() - interval '24 hours'"
+    }
+   ],
+   "options": {
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ]
+    },
+    "colorMode": "background"
+   }
+  },
+  {
+   "id": 2,
+   "title": "Changes per day",
+   "type": "timeseries",
+   "datasource": {
+    "type": "grafana-postgresql-datasource",
+    "uid": "civic-hub-pg"
+   },
+   "gridPos": {
+    "x": 6,
+    "y": 0,
+    "w": 18,
+    "h": 8
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "grafana-postgresql-datasource",
+      "uid": "civic-hub-pg"
+     },
+     "rawQuery": true,
+     "editorMode": "code",
+     "format": "time_series",
+     "rawSql": "SELECT date_trunc('day', detected_at) AS time, source_id AS metric, count(*) AS value FROM changes WHERE $__timeFilter(detected_at) GROUP BY 1,2 ORDER BY 1"
+    }
+   ]
+  },
+  {
+   "id": 3,
+   "title": "Last run per source",
+   "type": "table",
+   "datasource": {
+    "type": "grafana-postgresql-datasource",
+    "uid": "civic-hub-pg"
+   },
+   "gridPos": {
+    "x": 0,
+    "y": 5,
+    "w": 6,
+    "h": 8
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "grafana-postgresql-datasource",
+      "uid": "civic-hub-pg"
+     },
+     "rawQuery": true,
+     "editorMode": "code",
+     "format": "table",
+     "rawSql": "SELECT DISTINCT ON (source_id) source_id, finished_at, ok, items, changes, error FROM runs ORDER BY source_id, started_at DESC"
+    }
+   ]
+  },
+  {
+   "id": 4,
+   "title": "IRCC processing time (days) \u2014 $country",
+   "type": "timeseries",
+   "datasource": {
+    "type": "grafana-postgresql-datasource",
+    "uid": "civic-hub-pg"
+   },
+   "gridPos": {
+    "x": 0,
+    "y": 13,
+    "w": 12,
+    "h": 9
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "grafana-postgresql-datasource",
+      "uid": "civic-hub-pg"
+     },
+     "rawQuery": true,
+     "editorMode": "code",
+     "format": "time_series",
+     "rawSql": "SELECT o.observed_at AS time, i.title AS metric, o.number AS value FROM observations o JOIN items i USING (source_id, item_key) WHERE o.source_id='ca-ircc-country' AND i.title LIKE '%\u2014 ' || '$country' || '%' AND o.number IS NOT NULL AND $__timeFilter(o.observed_at) ORDER BY 1"
+    }
+   ]
+  },
+  {
+   "id": 5,
+   "title": "Inside-Canada processing times (days)",
+   "type": "timeseries",
+   "datasource": {
+    "type": "grafana-postgresql-datasource",
+    "uid": "civic-hub-pg"
+   },
+   "gridPos": {
+    "x": 12,
+    "y": 13,
+    "w": 12,
+    "h": 9
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "grafana-postgresql-datasource",
+      "uid": "civic-hub-pg"
+     },
+     "rawQuery": true,
+     "editorMode": "code",
+     "format": "time_series",
+     "rawSql": "SELECT o.observed_at AS time, i.title AS metric, o.number AS value FROM observations o JOIN items i USING (source_id, item_key) WHERE o.source_id='ca-ircc-incanada' AND o.number IS NOT NULL AND $__timeFilter(o.observed_at) ORDER BY 1"
+    }
+   ]
+  },
+  {
+   "id": 6,
+   "title": "Economy (Bank of Canada, StatCan)",
+   "type": "timeseries",
+   "datasource": {
+    "type": "grafana-postgresql-datasource",
+    "uid": "civic-hub-pg"
+   },
+   "gridPos": {
+    "x": 0,
+    "y": 22,
+    "w": 12,
+    "h": 8
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "grafana-postgresql-datasource",
+      "uid": "civic-hub-pg"
+     },
+     "rawQuery": true,
+     "editorMode": "code",
+     "format": "time_series",
+     "rawSql": "SELECT o.observed_at AS time, i.title AS metric, o.number AS value FROM observations o JOIN items i USING (source_id, item_key) WHERE o.source_id IN ('ca-boc','ca-statcan') AND i.item_key <> 'v1' AND $__timeFilter(o.observed_at) ORDER BY 1"
+    }
+   ]
+  },
+  {
+   "id": 7,
+   "title": "Latest changes",
+   "type": "table",
+   "datasource": {
+    "type": "grafana-postgresql-datasource",
+    "uid": "civic-hub-pg"
+   },
+   "gridPos": {
+    "x": 12,
+    "y": 22,
+    "w": 12,
+    "h": 8
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "grafana-postgresql-datasource",
+      "uid": "civic-hub-pg"
+     },
+     "rawQuery": true,
+     "editorMode": "code",
+     "format": "table",
+     "rawSql": "SELECT detected_at, source_id, change_type, title, old_value, new_value, url FROM changes ORDER BY detected_at DESC LIMIT 100"
+    }
+   ]
+  }
+ ],
+ "templating": {
+  "list": [
+   {
+    "name": "country",
+    "type": "custom",
+    "label": "Country (IRCC)",
+    "query": "Bahamas,Jamaica,India,Philippines,Nigeria,Mexico,United Kingdom,United States of America",
+    "current": {
+     "text": "Bahamas",
+     "value": "Bahamas"
+    }
+   }
+  ]
+ }
+}

@@ -1,0 +1,17 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - db.yaml
+  - app.yaml
+  - grafana.yaml
+  - network-policies.yaml
+labels:
+  - pairs: {app.kubernetes.io/part-of: civic-hub}
+    includeTemplates: true
+configMapGenerator:
+  - name: civic-hub-grafana-datasources
+    files: [grafana/datasources.yaml]
+  - name: civic-hub-grafana-provider
+    files: [grafana/provider.yaml]
+  - name: civic-hub-grafana-dashboards
+    files: [grafana/ask-canada.json]

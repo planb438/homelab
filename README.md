@@ -2,7 +2,7 @@
 
 **Last updated: 2026-11-18** · Status: cluster builds end-to-end on Ubuntu 26.04 (tested by Adari, Nov 18 2026) · Argo CD UI working via Traefik
 
-**Docs:** [Platform components (what / why / settings / AWS)](docs/components.md) · [Labs](labs/README.md) · [AWS plan](docs/aws.md) · Tracking: Homelab HQ (Google Sheet, CloudKanata Drive)
+**Docs:** [Platform components (what / why / settings / AWS)](docs/components.md) · [Labs](labs/README.md) · [Civic Hub (Ask Canada)](apps/civic-hub/README.md) · [AWS plan](docs/aws.md) · Tracking: Homelab HQ (Google Sheet, CloudKanata Drive)
 
 One laptop, one Kubernetes cluster in VMs, three environments, everything rebuilt from this repo.
 Built so the **same app manifests move to AWS EKS later** — only the cluster layer changes.
@@ -153,6 +153,7 @@ and thanks to this repo, moving it there is a new `clusters/eks` folder, not a r
 ## Changelog
 | Date | Change |
 |---|---|
+| 2026-11-19 | Civic Hub v0.1.0 (Ask Canada): Python collectors for IRCC, Canada.ca news, StatCan, Bank of Canada, open.canada.ca → PostgreSQL with change tracking + history; public page; Grafana; image CI to GHCR; `seal-civic-hub.sh` |
 | 2026-11-18 (eve) | Labs 01–06 (pod security, network policy, sealed secrets, ingress+TLS, RBAC, supply chain) rebuilt from old repos; Sealed Secrets + lab CA; `docs/components.md`; `scripts/versions.sh`; old repos tagged `backup-2026-11-18` |
 | 2026-11-18 (pm) | Argo CD UI at https://argocd.lab.local via Traefik (TLS passthrough); podinfo UID fix; Traefik chart pinned to 42.4.1 |
 | 2026-11-18 | Fresh-install fixes for Ubuntu 26.04 (qemu-system-x86, AppArmor, Terraform repo, kubectl on host); `reset-lab.sh`; bootstrap finds the kubeconfig itself; deploy guide + production-readiness notes |

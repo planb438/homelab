@@ -9,3 +9,6 @@ ansible/kubeconfig-*
 *.key
 secrets/
 .env
+__pycache__/
+.pytest_cache/
+*.db

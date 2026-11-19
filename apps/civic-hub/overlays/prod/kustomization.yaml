@@ -1,0 +1,10 @@
+# prod: pinned release tag. Promote = change newTag after dev looks right.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../../base
+  - ingress.yaml
+  # - sealedsecret.yaml   <- added by: bash scripts/seal-civic-hub.sh prod
+images:
+  - name: ghcr.io/planb438/civic-hub
+    newTag: 0.1.0

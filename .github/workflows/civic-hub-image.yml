@@ -1,0 +1,47 @@
+# Test, then build and push ghcr.io/planb438/civic-hub
+#   push to main (app changed)  -> tags: edge, sha-<short>
+#   git tag civic-hub-v0.2.0    -> tag: 0.2.0   (what prod uses)
+name: civic-hub-image
+on:
+  push:
+    branches: [main]
+    paths: ["apps/civic-hub/app/**", ".github/workflows/civic-hub-image.yml"]
+    tags: ["civic-hub-v*"]
+  pull_request:
+    paths: ["apps/civic-hub/app/**"]
+permissions:
+  contents: read
+  packages: write
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults: {run: {working-directory: apps/civic-hub/app}}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.13"}
+      - run: pip install -r requirements.txt pytest
+      - run: python -m pytest -q tests
+  image:
+    needs: test
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with: {registry: ghcr.io, username: "${{ github.actor }}", password: "${{ secrets.GITHUB_TOKEN }}"}
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/planb438/civic-hub
+          tags: |
+            type=raw,value=edge,enable=${{ github.ref == 'refs/heads/main' }}
+            type=sha,prefix=sha-,enable=${{ github.ref == 'refs/heads/main' }}
+            type=match,pattern=civic-hub-v(.*),group=1
+      - uses: docker/build-push-action@v6
+        with:
+          context: apps/civic-hub/app
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}

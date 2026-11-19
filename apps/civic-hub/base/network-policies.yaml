@@ -1,0 +1,41 @@
+# Only the hub's own pods can reach the database; only Traefik can reach the web page and Grafana.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: {name: civic-hub-db}
+spec:
+  podSelector: {matchLabels: {app.kubernetes.io/name: civic-hub-db}}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector: {matchLabels: {app.kubernetes.io/name: civic-hub-collector}}
+        - podSelector: {matchLabels: {app.kubernetes.io/name: civic-hub-web}}
+        - podSelector: {matchLabels: {app.kubernetes.io/name: civic-hub-grafana}}
+      ports: [{protocol: TCP, port: 5432}]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: {name: civic-hub-web}
+spec:
+  podSelector: {matchLabels: {app.kubernetes.io/name: civic-hub-web}}
+  policyTypes: [Ingress]
+  ingress:
+    - from: [{namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: traefik}}}]
+      ports: [{protocol: TCP, port: 8080}]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: {name: civic-hub-grafana}
+spec:
+  podSelector: {matchLabels: {app.kubernetes.io/name: civic-hub-grafana}}
+  policyTypes: [Ingress]
+  ingress:
+    - from: [{namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: traefik}}}]
+      ports: [{protocol: TCP, port: 3000}]
+---
+# The collector receives nothing.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: {name: civic-hub-collector}
+spec:
+  podSelector: {matchLabels: {app.kubernetes.io/name: civic-hub-collector}}
+  policyTypes: [Ingress]
