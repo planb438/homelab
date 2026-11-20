@@ -1,0 +1,16 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: gatepark
+  annotations:
+    cert-manager.io/cluster-issuer: lab-ca
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts: [gatepark.lab.local]
+      secretName: gatepark-tls
+  rules:
+    - host: gatepark.lab.local
+      http:
+        paths:
+          - {path: /, pathType: Prefix, backend: {service: {name: gatepark, port: {number: 80}}}}
