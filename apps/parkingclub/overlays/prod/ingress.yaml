@@ -1,0 +1,16 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: parkingclub
+  annotations:
+    cert-manager.io/cluster-issuer: lab-ca
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts: [parkingclub.lab.local]
+      secretName: parkingclub-tls
+  rules:
+    - host: parkingclub.lab.local
+      http:
+        paths:
+          - {path: /, pathType: Prefix, backend: {service: {name: parkingclub, port: {number: 80}}}}

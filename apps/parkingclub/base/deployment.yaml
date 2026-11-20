@@ -1,7 +1,7 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: gatepark
+  name: parkingclub
 spec:
   replicas: 1
   selector:
@@ -35,6 +35,6 @@ spec:
             - {name: tmp, mountPath: /tmp}          # nginx pid + cache
       volumes:
         - name: site
-          configMap: {name: gatepark-site}
+          configMap: {name: parkingclub-site}
         - name: tmp
           emptyDir: {sizeLimit: 16Mi}

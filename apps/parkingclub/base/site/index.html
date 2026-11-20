@@ -4,8 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow">
-<title>GatePark · YYZ parking (demo)</title>
-<meta name="description" content="GatePark demo: compare and book Toronto Pearson (YYZ) off-airport parking.">
+<title>ParkingClub · YYZ parking (demo)</title>
+<meta name="description" content="ParkingClub demo: compare and book Toronto Pearson (YYZ) off-airport parking.">
 <style>
 :root{--ink:#0f1b2d;--muted:#5b6b80;--line:#e3e8ef;--bg:#f6f8fb;--brand:#0b6bcb;--brand2:#0a4f96;--ok:#12805c;--warn:#b25e09;--card:#fff;--r:14px}
 *{box-sizing:border-box}html,body{margin:0}
@@ -70,7 +70,7 @@ dialog::backdrop{background:rgba(15,27,45,.55)}
 <div class="demo"><b>DEMO</b> · Sample prices and lots for illustration only. No real bookings or payments. Not affiliated with Toronto Pearson or the GTAA.</div>
 <header>
   <div class="wrap nav">
-    <a class="logo" href="#"><b>G</b>GatePark</a>
+    <a class="logo" href="#"><b>P</b>ParkingClub</a>
     <nav><a href="#how">How it works</a><a href="#owners">For lot owners</a></nav>
   </div>
   <div class="wrap hero">
@@ -116,7 +116,7 @@ dialog::backdrop{background:rgba(15,27,45,.55)}
 
 <footer>
   <div class="wrap row">
-    <span>© <span id="yr"></span> GatePark · Demo build</span>
+    <span>© <span id="yr"></span> ParkingClub · parkingclub.ca · Demo build</span>
     <span>Built by CloudKanata</span>
   </div>
 </footer>
@@ -160,7 +160,7 @@ function render(){
     const sub=l.rate*n;
     return `<article class="lot${l.featured?" feat":""}">
       <div>
-        ${l.featured?'<span class="tag">GatePark partner</span>':''}
+        ${l.featured?'<span class="tag">ParkingClub partner</span>':''}
         ${l.rate===cheapest?'<span class="tag g">Best price</span>':''}
         ${l.shuttle<=6?'<span class="tag o">Fast shuttle</span>':''}
         <h3>${l.name}</h3>
@@ -179,7 +179,7 @@ function book(id){
   $("#dlgBody").innerHTML=`<h3>Reserve at ${l.name}</h3>
    <div style="color:var(--muted);font-size:.9rem">${$("#din").value} ${$("#tin").value} → ${$("#dout").value}</div>
    <table><tr><td>${n} day${n===1?"":"s"} × ${fmt(l.rate)}</td><td>${fmt(sub)}</td></tr>
-   <tr><td>HST (13%)</td><td>${fmt(tax)}</td></tr><tr><td>GatePark booking fee</td><td>$0.00</td></tr>
+   <tr><td>HST (13%)</td><td>${fmt(tax)}</td></tr><tr><td>ParkingClub booking fee</td><td>$0.00</td></tr>
    <tr class="tot"><td>Total due at the lot</td><td>${fmt(tot)}</td></tr></table>
    <label style="font-size:.8rem;color:var(--muted)">Name</label><input id="nm" placeholder="Your name" autocomplete="off">
    <label style="font-size:.8rem;color:var(--muted)">Licence plate</label><input id="pl" placeholder="ABCD 123" autocomplete="off">
@@ -188,7 +188,7 @@ function book(id){
 }
 function confirmB(id){
   const l=LOTS.find(x=>x.id===id);
-  const code="GP-"+Math.random().toString(36).slice(2,8).toUpperCase();
+  const code="PC-"+Math.random().toString(36).slice(2,8).toUpperCase();
   $("#dlgBody").innerHTML=`<div class="conf"><h3>You're booked (demo)</h3>
    <div>${l.name}</div><div class="code">${code}</div>
    <p style="color:var(--muted);font-size:.9rem">In the real app this code goes to your email and phone, and straight to the lot's check-in screen. Nothing was charged.</p>
