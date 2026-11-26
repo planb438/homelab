@@ -13,7 +13,8 @@ args=(--from-literal=POSTGRES_PASSWORD="$(openssl rand -hex 24)"
       --from-literal=ADMIN_PASSWORD="$pw")
 [ -n "$launcher" ] && args+=(--from-literal=LAUNCHER="$(tr -d '\n' < "$launcher")")
 kubectl create secret generic "$name" -n "$env" "${args[@]}" --dry-run=client -o yaml \
-  | kubeseal --controller-name sealed-secrets-controller --controller-namespace kube-system -o yaml > "$out"
+  | kubeseal --controller-name sealed-secrets-controller --controller-namespace kube-system -o yaml \
+  | sed "0,/^  name: ${name}\$/s//  name: sitekit-secrets/" > "$out"   # kustomize adds the "${p}-" prefix back
 echo "Wrote $out"
 echo "Admin login for $site ($env): $email  /  $pw   <- shown once"
 echo "Note: the admin is only created when the database is empty (first start)."
