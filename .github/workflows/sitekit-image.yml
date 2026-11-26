@@ -1,0 +1,25 @@
+name: sitekit image
+on:
+  push:
+    branches: [main, lab-sites]
+    paths: ["apps/sitekit/app/**", ".github/workflows/sitekit-image.yml"]
+  workflow_dispatch:
+permissions:
+  contents: read
+  packages: write
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults: {run: {working-directory: apps/sitekit/app}}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.13"}
+      - run: pip install -r requirements.txt pytest && pytest -q
+      - uses: docker/login-action@v3
+        with: {registry: ghcr.io, username: "${{ github.actor }}", password: "${{ secrets.GITHUB_TOKEN }}"}
+      - uses: docker/build-push-action@v6
+        with:
+          context: apps/sitekit/app
+          push: true
+          tags: ghcr.io/planb438/sitekit:edge,ghcr.io/planb438/sitekit:${{ github.sha }}

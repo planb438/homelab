@@ -1,0 +1,16 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: sitekit
+  annotations:
+    cert-manager.io/cluster-issuer: lab-ca
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts: [ask.dev.lab.local]
+      secretName: ask-sitekit-tls
+  rules:
+    - host: ask.dev.lab.local
+      http:
+        paths:
+          - {path: /, pathType: Prefix, backend: {service: {name: sitekit-web, port: {number: 80}}}}

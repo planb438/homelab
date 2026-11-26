@@ -1,0 +1,32 @@
+# Lab copy of Adari Bain — Hub with logins + PostgreSQL. Live site is not touched.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namePrefix: hub-
+labels:
+  - pairs: {app.kubernetes.io/part-of: site-hub}
+    includeSelectors: true
+resources:
+  - ../../../sitekit/base
+  - ingress.yaml
+  - sealedsecret.yaml      # made by: scripts/seal-sitekit.sh hub dev <your-email>
+configMapGenerator:
+  - name: sitekit-config
+    literals:
+      - GITSYNC_REPO=https://github.com/planb438/planb438.github.io.git
+      - SITE_NAME=Adari Bain — Hub (lab)
+      - SITE_COLOR=#37474f
+      - PGHOST=hub-sitekit-db
+      - 'FORMS={"note":{"title":"Quick note","fields":[["email","Email",true],["message","Note",true]]}}'
+images:
+  - name: ghcr.io/planb438/sitekit
+    newTag: edge
+patches:
+  # the secret comes from a SealedSecret, which kustomize can't rename for us
+  - target: {kind: Deployment, name: sitekit-web}
+    patch: |-
+      - {op: replace, path: /spec/template/spec/containers/0/envFrom/1/secretRef/name, value: hub-sitekit-secrets}
+      - {op: replace, path: /spec/template/spec/containers/0/env/4/valueFrom/secretKeyRef/name, value: hub-sitekit-secrets}
+      - {op: add, path: /spec/template/spec/containers/0/imagePullPolicy, value: Always}
+  - target: {kind: StatefulSet, name: sitekit-db}
+    patch: |-
+      - {op: replace, path: /spec/template/spec/containers/0/env/3/valueFrom/secretKeyRef/name, value: hub-sitekit-secrets}
