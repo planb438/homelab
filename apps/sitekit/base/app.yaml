@@ -1,0 +1,72 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: sitekit-web
+spec:
+  selector: {app.kubernetes.io/name: sitekit-web}
+  ports: [{name: http, port: 80, targetPort: http}]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sitekit-web
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app.kubernetes.io/name: sitekit-web}
+  template:
+    metadata:
+      labels: {app.kubernetes.io/name: sitekit-web}
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile: {type: RuntimeDefault}
+      initContainers:
+        # first copy of the site files before the app starts
+        - name: git-sync-init
+          image: registry.k8s.io/git-sync/git-sync:v4.4.0
+          args: ["--repo=$(GITSYNC_REPO)", "--ref=main", "--root=/git", "--link=current", "--depth=1", "--one-time"]
+          envFrom: [{configMapRef: {name: sitekit-config}}]
+          resources:
+            requests: {cpu: 20m, memory: 32Mi}
+            limits: {memory: 128Mi}
+          securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: [ALL]}}
+          volumeMounts: [{name: site, mountPath: /git}, {name: tmp, mountPath: /tmp}]
+      containers:
+        - name: web
+          image: ghcr.io/planb438/sitekit:edge
+          ports: [{name: http, containerPort: 8080}]
+          envFrom:
+            - configMapRef: {name: sitekit-config}
+            - secretRef: {name: sitekit-secrets}
+          env:
+            - {name: SITE_ROOT, value: /git/current}
+            - {name: DATABASE_URL, value: "postgresql://"}   # host/user/db/password come from PG* variables
+            - {name: PGUSER, value: sitekit}
+            - {name: PGDATABASE, value: sitekit}
+            - name: PGPASSWORD
+              valueFrom: {secretKeyRef: {name: sitekit-secrets, key: POSTGRES_PASSWORD}}
+          readinessProbe: {httpGet: {path: /healthz, port: http}, periodSeconds: 10}
+          livenessProbe: {httpGet: {path: /healthz, port: http}, periodSeconds: 30, failureThreshold: 4}
+          resources:
+            requests: {cpu: 50m, memory: 96Mi}
+            limits: {memory: 256Mi}
+          securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: [ALL]}}
+          volumeMounts: [{name: site, mountPath: /git, readOnly: true}, {name: tmp, mountPath: /tmp}]
+        # keeps the site files in step with GitHub (every 5 minutes)
+        - name: git-sync
+          image: registry.k8s.io/git-sync/git-sync:v4.4.0
+          args: ["--repo=$(GITSYNC_REPO)", "--ref=main", "--root=/git", "--link=current", "--depth=1", "--period=300s"]
+          envFrom: [{configMapRef: {name: sitekit-config}}]
+          resources:
+            requests: {cpu: 10m, memory: 32Mi}
+            limits: {memory: 128Mi}
+          securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: [ALL]}}
+          volumeMounts: [{name: site, mountPath: /git}, {name: tmp, mountPath: /tmp}]
+      volumes:
+        - {name: site, emptyDir: {sizeLimit: 500Mi}}
+        - {name: tmp, emptyDir: {sizeLimit: 64Mi}}

@@ -1,0 +1,7 @@
+# Shared by every site-* app. No overlays here, so the ApplicationSet doesn't deploy this folder by itself.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - db.yaml
+  - app.yaml
+  - network-policies.yaml
