@@ -29,7 +29,7 @@ spec:
         # first copy of the site files before the app starts
         - name: git-sync-init
           image: registry.k8s.io/git-sync/git-sync:v4.4.0
-          args: ["--repo=$(GITSYNC_REPO)", "--ref=main", "--root=/git", "--link=current", "--depth=1", "--one-time"]
+          args: ["--repo=$(GITSYNC_REPO)", "--ref=$(GITSYNC_REF)", "--root=/git", "--link=current", "--depth=1", "--one-time"]
           envFrom: [{configMapRef: {name: sitekit-config}}]
           resources:
             requests: {cpu: 20m, memory: 32Mi}
@@ -60,7 +60,7 @@ spec:
         # keeps the site files in step with GitHub (every 5 minutes)
         - name: git-sync
           image: registry.k8s.io/git-sync/git-sync:v4.4.0
-          args: ["--repo=$(GITSYNC_REPO)", "--ref=main", "--root=/git", "--link=current", "--depth=1", "--period=300s"]
+          args: ["--repo=$(GITSYNC_REPO)", "--ref=$(GITSYNC_REF)", "--root=/git", "--link=current", "--depth=1", "--period=300s"]
           envFrom: [{configMapRef: {name: sitekit-config}}]
           resources:
             requests: {cpu: 10m, memory: 32Mi}

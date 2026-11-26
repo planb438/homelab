@@ -12,6 +12,7 @@ resources:
 configMapGenerator:
   - name: sitekit-config
     literals:
+      - GITSYNC_REF=dev          # lab follows the dev branch; live (GitHub Pages) follows main
       - GITSYNC_REPO=https://github.com/planb438/planb438.github.io.git
       - SITE_NAME=Adari Bain — Hub (lab)
       - SITE_COLOR=#37474f
@@ -19,7 +20,7 @@ configMapGenerator:
       - 'FORMS={"note":{"title":"Quick note","fields":[["email","Email",true],["message","Note",true]]}}'
 images:
   - name: ghcr.io/planb438/sitekit
-    newTag: edge
+    newTag: edge   # CI replaces this with the commit sha after each build
 patches:
   # the secret comes from a SealedSecret, which kustomize can't rename for us
   - target: {kind: Deployment, name: sitekit-web}

@@ -1,35 +1,44 @@
-# sitekit — lab copies of the sites, with logins and a database
+# Lab copies of the sites (dev namespace)
 
-Lab only. Nothing here touches the live sites (GitHub Pages / Cloudflare stay exactly as they are).
+Lab only. The live sites (GitHub Pages, Cloudflare, Stripe live) are never touched by anything here.
 
-Each pod:
-- **git-sync** pulls the site's public repo every 5 minutes → the real pages are served at `/` (same files as live).
-- **sitekit** (FastAPI) adds a private area at `/app`: log in, invite-only sign-up, roles (admin / staff / client),
-  forms saved to PostgreSQL, a staff inbox, user admin, password change, audit log.
-- **PostgreSQL 17** (one per site, its own volume). Only the app pod can reach it (NetworkPolicy).
-
-| Lab app | Host | Pulls from | Forms |
+| Lab app | Address | Follows | What it adds |
 |---|---|---|---|
-| site-cloudkanata | https://ck.dev.lab.local | cloudkanata-site | contact |
-| site-askcanada | https://ask.dev.lab.local | ask-canada | question |
-| site-acb | https://acb.dev.lab.local | acb-landscaping | quote |
-| site-hub | https://hub.dev.lab.local | planb438.github.io | (private launcher for admins) |
+| site-cloudkanata | https://ck.dev.lab.local | cloudkanata-site @ **dev** | logins, contact form → PostgreSQL |
+| site-askcanada | https://ask.dev.lab.local | ask-canada @ **dev** | logins, question form → PostgreSQL |
+| site-acb | https://acb.dev.lab.local | acb-landscaping @ **dev** | logins, quote form → PostgreSQL |
+| site-hub | https://hub.dev.lab.local | planb438.github.io @ **dev** | private launcher (admins) |
+| parkingclub-lab | https://pc.dev.lab.local | parkingclub-site @ **dev** (private, read-only deploy key) | the real Worker in workerd, local KV, no emails, Stripe **test** only |
+| hq-backup | (nightly job) | your HQ Google Sheets | .xlsx copy of every HQ sheet, kept 30 days |
 
-## First run (per site)
+## How changes flow
+- **Site pages:** push to the site repo's `dev` branch → the lab copy updates within ~5 min (ParkingClub ~2 min).
+  Happy? Merge `dev` → `main` → it goes live. Keep dev current after other changes to main:
+  `git checkout dev && git merge main && git push`.
+- **sitekit / pc-lab runner code:** push to `main` here → CI tests, builds an image tagged with the commit,
+  commits the new tag into the overlays → Argo CD rolls it out. Run `git pull` before your next push.
+- **Kubernetes settings:** edit `apps/*/overlays/dev` → Argo CD applies it.
+
+## One-time setup
+- Sites: `scripts/seal-sitekit.sh <cloudkanata|askcanada|acb|hub> dev <email>` (done).
+- ParkingClub: `scripts/seal-parkingclub-lab.sh` → adds a read-only deploy key, prints your first admin invite.
+- HQ sheets: make a Google Cloud service account (no roles needed), download its JSON key, share each sheet with its
+  email as **Viewer**, then `scripts/seal-hq-backup.sh sa.json hq-sheets.txt` (`Name|sheetId` per line; keep it out of git).
+  Run once now: `kubectl -n dev create job --from=cronjob/hq-backup hq-backup-now`. Copy files home: `scripts/hq-backup-get.sh`.
+- GitHub Packages: make **sitekit** and **pc-lab-runner** public (or add a pull secret).
+- /etc/hosts: add `pc.dev.lab.local` next to the others.
+
+## Lost a sitekit password
+Never changed it: `kubectl get secret ck-sitekit-secrets -n dev -o jsonpath='{.data.ADMIN_PASSWORD}' | base64 -d`
+Changed it: set a new hash —
 ```bash
-./scripts/seal-sitekit.sh cloudkanata dev you@example.com   # prints the admin password once
-./scripts/seal-sitekit.sh askcanada  dev you@example.com
-./scripts/seal-sitekit.sh acb        dev you@example.com
-./scripts/seal-sitekit.sh hub        dev you@example.com  launcher.json   # optional private links
-git add apps/site-*/overlays/dev/sealedsecret.yaml && git commit -m "lab: sitekit secrets" && git push
+read -s -p "New password: " PW; echo
+HASH=$(kubectl exec -n dev deploy/ck-sitekit-web -c web -- python -c "from sitekit.security import hash_password as h; print(h('$PW'))")
+kubectl exec -n dev ck-sitekit-db-0 -- psql -U sitekit -d sitekit -c "UPDATE users SET pw_hash='$HASH', active=true WHERE email='you@email';"
 ```
-Add the hosts to `/etc/hosts` (your Traefik IP), open `https://<host>/app`, log in, then use **Users → Invite** to make more logins.
 
-`launcher.json` example: `[{"group":"Business","title":"ParkingClub HQ","url":"https://docs.google.com/…","note":"sheet"}]`
-
-## Develop locally
+## Develop sitekit locally
 ```bash
-cd apps/sitekit/app && pip install -r requirements.txt pytest && pytest -q
-SITE_ROOT=../../../.. ADMIN_EMAIL=a@b.c ADMIN_PASSWORD=change-me-12 SECURE_COOKIES=false uvicorn sitekit.main:app --reload
+cd apps/sitekit/app && pip install -r requirements.txt pytest && python -m pytest -q
+SITE_ROOT=/path/to/a/site ADMIN_EMAIL=a@b.c ADMIN_PASSWORD=change-me-12 SECURE_COOKIES=false uvicorn sitekit.main:app --reload
 ```
-SQLite is used when `DATABASE_URL` isn't set; in the cluster it's PostgreSQL.

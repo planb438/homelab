@@ -4,3 +4,5 @@ python-multipart==0.0.34
 psycopg[binary]==3.3.9
 psycopg-pool==3.3.3
 httpx==0.28.1
+google-auth==2.63.1
+requests==2.33.0

@@ -1,0 +1,36 @@
+name: pc-lab runner image
+on:
+  push:
+    branches: [main]
+    paths: ["apps/parkingclub-lab/runner/**", ".github/workflows/pc-lab-runner-image.yml"]
+  workflow_dispatch:
+permissions:
+  contents: write
+  packages: write
+concurrency: {group: lab-images-pc, cancel-in-progress: false}
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build
+        run: docker build -t pc-lab-runner:ci apps/parkingclub-lab/runner
+      - name: Smoke test (KV seed, assets, https origin, no live keys)
+        run: |
+          set -e
+          docker run --rm -e STRIPE_SECRET_KEY=sk_live_nope -v "$PWD/apps/parkingclub-lab/runner/smoke:/git/current:ro" pc-lab-runner:ci && exit 1 || echo "live key refused: ok"
+          docker run -d --name pc -p 8787:8787 -e ADMIN_INVITE=smoke-token -e LAB_HOST=pc.dev.lab.local \
+            -v "$PWD/apps/parkingclub-lab/runner/smoke:/git/current:ro" pc-lab-runner:ci
+          for i in $(seq 1 60); do curl -sf localhost:8787/ >/dev/null && break; sleep 2; done
+          docker logs pc | tail -30
+          curl -sf localhost:8787/ | grep -q "smoke ok"
+          curl -sf localhost:8787/kv | grep -q '"role":"admin"'
+          curl -sf localhost:8787/origin | grep -qx "https://pc.dev.lab.local"
+          docker rm -f pc
+      - uses: docker/login-action@v3
+        with: {registry: ghcr.io, username: "${{ github.actor }}", password: "${{ secrets.GITHUB_TOKEN }}"}
+      - name: Push
+        run: |
+          for t in edge ${{ github.sha }}; do docker tag pc-lab-runner:ci ghcr.io/planb438/pc-lab-runner:$t; docker push ghcr.io/planb438/pc-lab-runner:$t; done
+      - name: Roll out (commit new tag -> Argo CD)
+        run: bash scripts/ci-bump-tag.sh "${{ github.sha }}" apps/parkingclub-lab/overlays/*/kustomization.yaml

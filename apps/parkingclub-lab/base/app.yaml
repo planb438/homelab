@@ -1,0 +1,116 @@
+# Lab copy of ParkingClub: the real Worker code (private repo, read-only deploy key) running in workerd.
+# Local KV on a volume, NO email sending, Stripe TEST key only (the runner refuses a live key).
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: pc-lab-data
+spec:
+  accessModes: [ReadWriteOnce]
+  resources: {requests: {storage: 1Gi}}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: pc-lab
+spec:
+  selector: {app.kubernetes.io/name: pc-lab}
+  ports: [{name: http, port: 80, targetPort: http}]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pc-lab
+spec:
+  replicas: 1
+  strategy: {type: Recreate}          # one writer for the KV volume
+  selector:
+    matchLabels: {app.kubernetes.io/name: pc-lab}
+  template:
+    metadata:
+      labels: {app.kubernetes.io/name: pc-lab}
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 65533
+        fsGroup: 65533
+        seccompProfile: {type: RuntimeDefault}
+      initContainers:
+        - name: git-sync-init
+          image: registry.k8s.io/git-sync/git-sync:v4.4.0
+          args: ["--repo=git@github.com:planb438/parkingclub-site.git", "--ref=$(GITSYNC_REF)", "--root=/git", "--link=current", "--depth=1",
+                 "--ssh-key-file=/etc/git-secret/ssh", "--ssh-known-hosts-file=/etc/git-known-hosts/known_hosts", "--one-time"]
+          env:
+            - {name: GITSYNC_REF, value: dev}
+          resources:
+            requests: {cpu: 10m, memory: 32Mi}
+            limits: {memory: 128Mi}
+          securityContext: {runAsUser: 65533, allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: [ALL]}}
+          volumeMounts:
+            - {name: site, mountPath: /git}
+            - {name: tmp, mountPath: /tmp}
+            - {name: deploy-key, mountPath: /etc/git-secret, readOnly: true}
+            - {name: known-hosts, mountPath: /etc/git-known-hosts, readOnly: true}
+      containers:
+        - name: worker
+          image: ghcr.io/planb438/pc-lab-runner:edge
+          ports: [{name: http, containerPort: 8787}]
+          env:
+            - {name: LAB_HOST, value: pc.dev.lab.local}
+            - name: STRIPE_SECRET_KEY
+              valueFrom: {secretKeyRef: {name: pc-lab-secrets, key: STRIPE_SECRET_KEY}}
+            - name: TEST_TOKEN
+              valueFrom: {secretKeyRef: {name: pc-lab-secrets, key: TEST_TOKEN}}
+            - name: ADMIN_INVITE
+              valueFrom: {secretKeyRef: {name: pc-lab-secrets, key: ADMIN_INVITE}}
+          readinessProbe: {tcpSocket: {port: http}, initialDelaySeconds: 10, periodSeconds: 10}
+          livenessProbe: {tcpSocket: {port: http}, initialDelaySeconds: 60, periodSeconds: 30, failureThreshold: 4}
+          resources:
+            requests: {cpu: 100m, memory: 256Mi}
+            limits: {memory: 768Mi}
+          securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: [ALL]}}
+          volumeMounts:
+            - {name: site, mountPath: /git, readOnly: true}
+            - {name: data, mountPath: /data}
+            - {name: work, mountPath: /work}
+            - {name: home, mountPath: /home/app}
+            - {name: tmp, mountPath: /tmp}
+        - name: git-sync
+          image: registry.k8s.io/git-sync/git-sync:v4.4.0
+          args: ["--repo=git@github.com:planb438/parkingclub-site.git", "--ref=$(GITSYNC_REF)", "--root=/git", "--link=current", "--depth=1",
+                 "--ssh-key-file=/etc/git-secret/ssh", "--ssh-known-hosts-file=/etc/git-known-hosts/known_hosts", "--period=120s"]
+          env:
+            - {name: GITSYNC_REF, value: dev}
+          resources:
+            requests: {cpu: 10m, memory: 32Mi}
+            limits: {memory: 128Mi}
+          securityContext: {runAsUser: 65533, allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: [ALL]}}
+          volumeMounts:
+            - {name: site, mountPath: /git}
+            - {name: tmp, mountPath: /tmp}
+            - {name: deploy-key, mountPath: /etc/git-secret, readOnly: true}
+            - {name: known-hosts, mountPath: /etc/git-known-hosts, readOnly: true}
+      volumes:
+        - {name: site, emptyDir: {sizeLimit: 300Mi}}
+        - {name: work, emptyDir: {sizeLimit: 300Mi}}
+        - {name: home, emptyDir: {sizeLimit: 200Mi}}
+        - {name: tmp, emptyDir: {sizeLimit: 200Mi}}
+        - {name: data, persistentVolumeClaim: {claimName: pc-lab-data}}
+        - name: deploy-key
+          secret: {secretName: pc-lab-secrets, items: [{key: DEPLOY_KEY, path: ssh}], defaultMode: 0400}
+        - {name: known-hosts, configMap: {name: pc-lab-known-hosts}}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: pc-lab
+spec:
+  podSelector:
+    matchLabels: {app.kubernetes.io/name: pc-lab}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels: {kubernetes.io/metadata.name: traefik}
+      ports: [{port: 8787}]
