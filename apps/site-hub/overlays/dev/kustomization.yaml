@@ -20,7 +20,7 @@ configMapGenerator:
       - 'FORMS={"note":{"title":"Quick note","fields":[["email","Email",true],["message","Note",true]]}}'
 images:
   - name: ghcr.io/planb438/sitekit
-    newTag: edge   # CI replaces this with the commit sha after each build
+    newTag: 3a21081d3a0a705fc111217702d7d9af705c34e9
 patches:
   # the secret comes from a SealedSecret, which kustomize can't rename for us
   - target: {kind: Deployment, name: sitekit-web}
