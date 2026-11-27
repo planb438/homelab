@@ -1,0 +1,20 @@
+# CIS 4.1.x: kubelet unit + config files readable by root only (all nodes).
+- name: Find the kubelet service files
+  ansible.builtin.find:
+    paths: [/usr/lib/systemd/system, /etc/systemd/system, /usr/lib/systemd/system/kubelet.service.d, /etc/systemd/system/kubelet.service.d]
+    patterns: ["kubelet.service", "*.conf"]
+  register: kubelet_units
+
+- name: kubelet service files 600
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    mode: "0600"
+  loop: "{{ kubelet_units.files | selectattr('path', 'search', 'kubelet') | list }}"
+  loop_control: {label: "{{ item.path }}"}
+
+- name: kubelet config + kubeconfig 600
+  ansible.builtin.file:
+    path: "{{ item }}"
+    mode: "0600"
+  loop: [/var/lib/kubelet/config.yaml, /etc/kubernetes/kubelet.conf]
+  failed_when: false

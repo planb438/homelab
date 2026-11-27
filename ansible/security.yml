@@ -29,6 +29,12 @@
   tags: [harden]
   roles: [apiserver_hardening]
 
+- name: Node file permissions (all nodes)
+  hosts: k8s
+  become: true
+  tags: [harden]
+  roles: [node_hardening]
+
 - name: kube-bench AFTER hardening
   hosts: k8s
   become: true

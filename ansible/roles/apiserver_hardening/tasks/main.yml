@@ -71,7 +71,7 @@
     - name: Patch kube-apiserver manifest
       ansible.builtin.command: /usr/local/sbin/patch-apiserver.py
       register: patch
-      changed_when: "'CHANGED' in patch.stdout"
+      changed_when: "'RESULT=CHANGED' in patch.stdout_lines"
 
     - name: Wait for the API server to restart and be healthy
       ansible.builtin.shell: |
@@ -86,8 +86,9 @@
   rescue:
     - name: Undo - restore the previous manifest
       ansible.builtin.shell: |
-        b="$(echo '{{ patch.stdout | default('') }}' | sed -n 's/^BACKUP=//p')"
-        [ -n "$b" ] && cp "$b" /etc/kubernetes/manifests/kube-apiserver.yaml
+        echo '{{ patch.stdout | default('') }}' | sed -n 's/^BACKUP=//p' | while IFS='|' read -r b dst; do
+          [ -n "$b" ] && cp "$b" "$dst"
+        done
       when: patch is defined
     - name: Stop here
       ansible.builtin.fail:
@@ -139,5 +140,5 @@
   ansible.builtin.debug:
     msg:
       - "Secrets in etcd now start with: {{ etcd_raw.stdout }}"
-      - "Audit log: /var/log/kubernetes/audit/audit.log on cp1 (7 days, 5 x 50 MB)"
+      - "Audit log: /var/log/kubernetes/audit/audit.log on cp1 (30 days, 10 x 100 MB)"
       - "Encryption key copy: ~/homelab-keys/encryption-config.yaml (keep it out of Git, back it up)"

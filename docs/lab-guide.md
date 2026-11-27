@@ -424,7 +424,7 @@ Keep `~/homelab-keys/encryption-config.yaml` safe and backed up: without it an e
 
 ### 2. API audit log
 
-Every request to the API server is recorded in `/var/log/kubernetes/audit/audit.log` on cp1 (kept 7 days, 5 files of 50 MB). The policy (`ansible/roles/apiserver_hardening/files/audit-policy.yaml`):
+Every request to the API server is recorded in `/var/log/kubernetes/audit/audit.log` on cp1 (CIS values: kept 30 days, 10 files of 100 MB). The policy (`ansible/roles/apiserver_hardening/files/audit-policy.yaml`):
 
 | What | Level | Why |
 | --- | --- | --- |
@@ -451,6 +451,14 @@ ansible-playbook security.yml --tags bench       # just a fresh report
 ```
 
 Fresh builds get all of this automatically: `site.yml` now ends by running `security.yml`.
+
+**First report (Nov 27, 2026):** cp1 65 pass / 11 fail, w1 and w2 15 pass / 2 fail. Fixed in the next pass: profiling off on the API server, controller manager and scheduler; CIS audit retention; manifest and kubelet file permissions. Known exceptions, documented on purpose:
+
+| Check | Why it stays | Plan |
+| --- | --- | --- |
+| 1.1.12 etcd data dir owned by etcd:etcd | kubeadm runs etcd as root, so an `etcd` user owns nothing | Accept (same on most kubeadm clusters) |
+| 1.2.5 --kubelet-certificate-authority | Needs kubelet serving certificates signed by the cluster CA (`serverTLSBootstrap` + CSR approval) | Next pass |
+| 4.2.6 protectKernelDefaults | The kubelet refuses to start unless several kernel settings match exactly | Next pass, with the sysctls set first |
 
 ### 4. Velero backups to AWS S3
 
