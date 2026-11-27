@@ -1,0 +1,128 @@
+# Encryption at rest for Secrets (secretbox) + API audit logging, with an automatic undo if the API server
+# doesn't come back healthy within 3 minutes.
+- name: Folders
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: directory
+    mode: "{{ item.mode }}"
+  loop:
+    - {path: /etc/kubernetes/enc, mode: "0700"}
+    - {path: /etc/kubernetes/audit, mode: "0755"}
+    - {path: /var/log/kubernetes/audit, mode: "0700"}
+
+- name: Encryption key (made once on cp1, never in Git)
+  ansible.builtin.shell: |
+    set -e
+    umask 077
+    key="$(head -c 32 /dev/urandom | base64)"
+    cat > /etc/kubernetes/enc/encryption-config.yaml <<EOF
+    apiVersion: apiserver.config.k8s.io/v1
+    kind: EncryptionConfiguration
+    resources:
+      - resources: [secrets]
+        providers:
+          - secretbox:
+              keys:
+                - name: key1
+                  secret: ${key}
+          - identity: {}
+    EOF
+  args:
+    creates: /etc/kubernetes/enc/encryption-config.yaml
+
+- name: Audit policy
+  ansible.builtin.copy:
+    src: audit-policy.yaml
+    dest: /etc/kubernetes/audit/policy.yaml
+    mode: "0644"
+
+- name: Patch script
+  ansible.builtin.copy:
+    src: patch-apiserver.py
+    dest: /usr/local/sbin/patch-apiserver.py
+    mode: "0700"
+
+- name: etcd backup before touching the API server
+  ansible.builtin.shell: |
+    set -e
+    id="$(crictl ps --name etcd -q | head -1)"
+    crictl exec "$id" etcdctl --endpoints=https://127.0.0.1:2379 \
+      --cacert=/etc/kubernetes/pki/etcd/ca.crt --cert=/etc/kubernetes/pki/etcd/healthcheck-client.crt \
+      --key=/etc/kubernetes/pki/etcd/healthcheck-client.key snapshot save /var/lib/etcd/pre-security-$(date +%s).db
+  changed_when: true
+
+- name: Apply flags (with automatic undo)
+  block:
+    - name: Patch kube-apiserver manifest
+      ansible.builtin.command: /usr/local/sbin/patch-apiserver.py
+      register: patch
+      changed_when: "'CHANGED' in patch.stdout"
+
+    - name: Wait for the API server to restart and be healthy
+      ansible.builtin.shell: |
+        sleep 20
+        for i in $(seq 1 36); do
+          curl -skf https://127.0.0.1:6443/livez >/dev/null && kubectl --kubeconfig /etc/kubernetes/admin.conf get --raw /readyz >/dev/null && exit 0
+          sleep 5
+        done
+        exit 1
+      when: patch is changed
+      changed_when: false
+  rescue:
+    - name: Undo - restore the previous manifest
+      ansible.builtin.shell: |
+        b="$(echo '{{ patch.stdout | default('') }}' | sed -n 's/^BACKUP=//p')"
+        [ -n "$b" ] && cp "$b" /etc/kubernetes/manifests/kube-apiserver.yaml
+      when: patch is defined
+    - name: Stop here
+      ansible.builtin.fail:
+        msg: "API server didn't come back, previous settings restored. Check: sudo crictl ps -a | grep apiserver ; sudo crictl logs <id>"
+
+- name: Re-write every Secret so existing ones get encrypted too (once)
+  ansible.builtin.shell: |
+    set -o pipefail
+    kubectl --kubeconfig /etc/kubernetes/admin.conf get secrets -A -o json \
+      | kubectl --kubeconfig /etc/kubernetes/admin.conf replace -f - >/dev/null
+    touch /etc/kubernetes/enc/.reencrypted-key1
+  args:
+    executable: /bin/bash
+    creates: /etc/kubernetes/enc/.reencrypted-key1
+
+- name: Prove it - read a Secret straight from etcd
+  ansible.builtin.shell: |
+    set -o pipefail
+    name="$(kubectl --kubeconfig /etc/kubernetes/admin.conf -n kube-system get secrets -o name | head -1 | cut -d/ -f2)"
+    id="$(crictl ps --name etcd -q | head -1)"
+    crictl exec "$id" etcdctl --endpoints=https://127.0.0.1:2379 \
+      --cacert=/etc/kubernetes/pki/etcd/ca.crt --cert=/etc/kubernetes/pki/etcd/healthcheck-client.crt \
+      --key=/etc/kubernetes/pki/etcd/healthcheck-client.key get "/registry/secrets/kube-system/$name" --print-value-only | head -c 30
+  args:
+    executable: /bin/bash
+  register: etcd_raw
+  changed_when: false
+  failed_when: "'k8s:enc:secretbox:v1:key1' not in etcd_raw.stdout"
+
+- name: Audit log is being written
+  ansible.builtin.shell: sleep 5 && test -s /var/log/kubernetes/audit/audit.log && tail -n1 /var/log/kubernetes/audit/audit.log | head -c 200
+  register: audit_tail
+  changed_when: false
+
+- name: Keep a copy of the encryption key on your desktop (needed to restore etcd backups)
+  ansible.builtin.fetch:
+    src: /etc/kubernetes/enc/encryption-config.yaml
+    dest: "{{ lookup('env', 'HOME') }}/homelab-keys/encryption-config.yaml"
+    flat: true
+
+- name: Lock down the desktop copy
+  ansible.builtin.file:
+    path: "{{ lookup('env', 'HOME') }}/homelab-keys/encryption-config.yaml"
+    mode: "0600"
+  delegate_to: localhost
+  become: false
+
+- name: Result
+  ansible.builtin.debug:
+    msg:
+      - "Secrets in etcd now start with: {{ etcd_raw.stdout }}"
+      - "Audit log: /var/log/kubernetes/audit/audit.log on cp1 (7 days, 5 x 50 MB)"
+      - "Encryption key copy: ~/homelab-keys/encryption-config.yaml (keep it out of Git, back it up)"

@@ -8,8 +8,12 @@ export KUBECONFIG="${KUBECONFIG:-$REPO_DIR/ansible/kubeconfig-lab}"
 OUT="$REPO_DIR/platform/velero/sealedsecret.yaml"
 command -v kubeseal >/dev/null || { echo "kubeseal missing - see labs/03-sealed-secrets/README.md"; exit 1; }
 [ -f "$OUT" ] && { echo "$OUT exists already (delete it to rotate keys)"; exit 1; }
-read -rp  "AWS access key ID for the velero IAM user: " AK
-read -rsp "AWS secret access key (hidden): " SK; echo
+if [ -n "${VELERO_AK:-}" ] && [ -n "${VELERO_SK:-}" ]; then
+  AK="$VELERO_AK"; SK="$VELERO_SK"            # handed over by scripts/aws-velero-bootstrap.sh, never printed
+else
+  read -rp  "AWS access key ID for the velero IAM user: " AK
+  read -rsp "AWS secret access key (hidden): " SK; echo
+fi
 CREDS="$(printf '[default]\naws_access_key_id=%s\naws_secret_access_key=%s\n' "$AK" "$SK")"
 kubectl create secret generic velero-aws-credentials -n velero --from-literal=cloud="$CREDS" \
   --dry-run=client -o yaml | kubeseal -o yaml > "$OUT"

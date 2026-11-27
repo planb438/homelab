@@ -406,6 +406,65 @@ The `pc-lab-runner` image is smoke-tested in GitHub Actions before every release
 
 The `hq-backup` CronJob runs at 3:23 AM cluster time, which is UTC (10:23 PM Toronto). It logs into Google as a read-only **service account** and saves each HQ sheet as .xlsx, all tabs, into the `hq-backups` volume, one folder per day, kept 30 days. It never writes to Google. Setup: service account key + sheets shared as Viewer + `scripts/seal-hq-backup.sh`. Copy files home with `scripts/hq-backup-get.sh`.
 
+## Security hardening and backups
+
+Three things a client asks about first, and how the lab does them.
+
+### 1. Encryption at rest (Secrets in etcd)
+
+By default Kubernetes stores Secrets in etcd as plain base64: anyone with a copy of etcd or its backups can read every password. `ansible/security.yml` turns on the API server's **EncryptionConfiguration** with the `secretbox` provider (XSalsa20-Poly1305):
+
+1. A random 32-byte key is created **on cp1** (`/etc/kubernetes/enc/encryption-config.yaml`, mode 600). It is never in Git; a copy goes to `~/homelab-keys/` on your desktop for restores.
+2. An etcd snapshot is taken, then the API server manifest is patched (flag + mount). The original manifest is backed up to `/root/apiserver-backups/` — never inside `/etc/kubernetes/manifests`, where a copy would start a second API server.
+3. If the API server isn't healthy within 3 minutes, the playbook **puts the old manifest back** and stops.
+4. Every existing Secret is re-written so it gets encrypted too.
+5. Proof: the playbook reads a Secret straight from etcd and checks it starts with `k8s:enc:secretbox:v1:key1`.
+
+Keep `~/homelab-keys/encryption-config.yaml` safe and backed up: without it an etcd backup can't be restored. Velero backups are not affected (Velero reads through the API).
+
+### 2. API audit log
+
+Every request to the API server is recorded in `/var/log/kubernetes/audit/audit.log` on cp1 (kept 7 days, 5 files of 50 MB). The policy (`ansible/roles/apiserver_hardening/files/audit-policy.yaml`):
+
+| What | Level | Why |
+| --- | --- | --- |
+| Health checks, kube-proxy watches, events, leases | not logged | noise |
+| Secrets, ConfigMaps, tokens | metadata only | who touched them, never the values |
+| RBAC changes | full request and response | privilege changes are the first thing to investigate |
+| exec / attach / port-forward | request | who got a shell into a pod |
+| Any other create, update, patch, delete | request | what changed |
+| Everything else (reads) | metadata | who looked |
+
+Read it: `ssh ubuntu@192.168.122.10 sudo tail -f /var/log/kubernetes/audit/audit.log | jq -c '{user: .user.username, verb, uri: .requestURI}'`
+
+### 3. kube-bench (CIS Kubernetes Benchmark)
+
+kube-bench checks each node against the CIS benchmark. The playbook installs the latest release on all three nodes and runs it **before and after** hardening, then writes `reports/kube-bench/<date>/SUMMARY.md` on your desktop: PASS/FAIL/WARN per node, what this run fixed, and the remaining FAILs with the fix for each. Reports stay on your desktop (`reports/` is git-ignored) because they list weaknesses.
+
+Run it:
+
+```bash
+cd ansible
+ansible-playbook security.yml                    # before report -> encryption + audit -> after report
+ansible-playbook security.yml -e snapshot=true   # also snapshot the 3 VMs first (slower)
+ansible-playbook security.yml --tags bench       # just a fresh report
+```
+
+Fresh builds get all of this automatically: `site.yml` now ends by running `security.yml`.
+
+### 4. Velero backups to AWS S3
+
+Velero copies every namespace (objects and volume data) to S3 every night at 2:30 AM Toronto and keeps 30 days. One command sets everything up with the AWS CLI:
+
+```bash
+bash scripts/aws-velero-bootstrap.sh cloudkanata-homelab-backups ca-central-1
+git add -A && git commit -m "velero: on" && git push
+```
+
+It creates a **private, encrypted, versioned** bucket, an IAM user `velero-homelab` that can only use that bucket, and a new access key that goes straight into a SealedSecret: never printed or saved in plain text. Then it switches the Velero app on for Argo CD. Test with `velero backup create first-test --wait` and a restore into a scratch namespace (`docs/aws-velero.md`).
+
+Note: Velero backups contain your Secrets as the API returns them (decrypted), which is why the bucket is private and encrypted, and the IAM user is limited to it.
+
 ## CI/CD: from a commit to a running pod
 
 **CI** (GitHub Actions) tests and builds. **CD** (Argo CD) deploys.
@@ -444,7 +503,7 @@ The `hq-backup` CronJob runs at 3:23 AM cluster time, which is UTC (10:23 PM Tor
 | Source | Read-only deploy key; secret scanning and push protection | Lab compromise changing code; keys pushed by accident |
 | Change control | Everything through Git and CI tests | Untested or unrecorded changes |
 
-Known gaps: Kyverno only *reports* (switch to `Enforce` once nothing breaks a rule), and the sealed-secrets private key exists only in the cluster. Back it up somewhere safe, never in Git:
+Known gaps: Kyverno only *reports* (switch to `Enforce` once nothing breaks a rule), and the sealed-secrets private key exists only in the cluster. Encryption at rest and the audit log are covered by `ansible/security.yml`. Back it up somewhere safe, never in Git:
 
 ```
 kubectl get secret -n kube-system -l sealedsecrets.bitnami.com/sealed-secrets-key -o yaml > sealed-secrets-key.yaml
@@ -481,6 +540,8 @@ kubectl get secret -n kube-system -l sealedsecrets.bitnami.com/sealed-secrets-ke
 | CPU and memory | `kubectl top nodes` · `kubectl top pods -n dev` |
 | New sealed secret | `scripts/seal-sitekit.sh <site> dev <email>` |
 | Turn on two-step login | open `/app/account/2fa` on any lab site |
+| Security hardening + report | `cd ansible && ansible-playbook security.yml` |
+| Velero on S3 (first time) | `bash scripts/aws-velero-bootstrap.sh <bucket> ca-central-1` |
 | Ops panel guard in place? | `kubectl get validatingadmissionpolicy ck-sitekit-ops-tenants-only` |
 
 ### The one-minute client explanation

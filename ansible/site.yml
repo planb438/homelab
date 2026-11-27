@@ -12,3 +12,6 @@
   hosts: workers
   become: true
   roles: [worker]
+
+# Encryption at rest, audit log and a first kube-bench report on every fresh build
+- import_playbook: security.yml
