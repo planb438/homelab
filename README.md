@@ -2,7 +2,7 @@
 
 **Last updated: 2026-11-18** · Status: cluster builds end-to-end on Ubuntu 26.04 (tested by Adari, Nov 18 2026) · Argo CD UI working via Traefik
 
-**Docs:** [Platform components (what / why / settings / AWS)](docs/components.md) · [Labs](labs/README.md) · [Civic Hub (Ask Canada)](apps/civic-hub/README.md) · [AWS plan](docs/aws.md) · Tracking: Homelab HQ (Google Sheet, CloudKanata Drive)
+**Docs:** [**Lab guide — every layer explained**](docs/lab-guide.md) · [Changelog](docs/CHANGELOG.md) · [Platform components (what / why / settings / AWS)](docs/components.md) · [Labs](labs/README.md) · [Civic Hub (Ask Canada)](apps/civic-hub/README.md) · [AWS plan](docs/aws.md) · Tracking: Homelab HQ (Google Sheet, CloudKanata Drive)
 
 One laptop, one Kubernetes cluster in VMs, three environments, everything rebuilt from this repo.
 Built so the **same app manifests move to AWS EKS later** — only the cluster layer changes.

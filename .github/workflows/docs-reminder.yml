@@ -1,0 +1,20 @@
+name: docs reminder
+on:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: {fetch-depth: 0}
+      - name: Did the docs change with the code?
+        run: |
+          base="${{ github.event.pull_request.base.sha }}"
+          changed=$(git diff --name-only "$base" HEAD)
+          if echo "$changed" | grep -qE '^(apps|platform|clusters|infra|ansible)/' && ! echo "$changed" | grep -q '^docs/'; then
+            echo "::warning title=Docs not updated::This PR changes the lab but not docs/. Update docs/lab-guide.md and docs/CHANGELOG.md."
+          else
+            echo "Docs look in step."
+          fi
