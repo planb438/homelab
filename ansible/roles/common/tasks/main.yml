@@ -2,6 +2,15 @@
   ansible.builtin.command: cloud-init status --wait
   changed_when: false
 
+- name: Wait for first-boot unattended-upgrades to finish (holds the apt lock)
+  ansible.builtin.shell: |
+    for i in $(seq 1 180); do
+      pgrep -f unattended-upgr >/dev/null || fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1 || exit 0
+      sleep 5
+    done
+    echo "still busy after 15 min"; exit 1
+  changed_when: false
+
 - name: Disable swap now
   ansible.builtin.command: swapoff -a
   changed_when: false
@@ -35,6 +44,7 @@
 
 - name: Base packages
   ansible.builtin.apt:
+    lock_timeout: 900   # fresh VMs run unattended-upgrades on first boot
     name: [containerd, apt-transport-https, ca-certificates, curl, gpg]
     state: present
     update_cache: true
@@ -70,6 +80,7 @@
 
 - name: kubelet kubeadm kubectl
   ansible.builtin.apt:
+    lock_timeout: 900   # fresh VMs run unattended-upgrades on first boot
     name: [kubelet, kubeadm, kubectl]
     state: present
     update_cache: true

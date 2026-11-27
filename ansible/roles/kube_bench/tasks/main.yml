@@ -16,6 +16,7 @@
 
 - name: Install kube-bench {{ kb_version }}
   ansible.builtin.apt:
+    lock_timeout: 900   # fresh VMs run unattended-upgrades on first boot
     deb: "{{ kb_deb }}"
   register: kb_install
   retries: 3

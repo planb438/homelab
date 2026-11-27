@@ -15,3 +15,6 @@ Newest first. One line per change that affects what runs or how to use it. Updat
 | 2026-11-20 | ParkingClub demo (static nginx) at parkingclub.lab.local | apps/parkingclub |
 | 2026-11-19 | Civic Hub (Ask Canada) collector, web, Postgres, Grafana | apps/civic-hub |
 | 2026-11-18 | Cluster builds end-to-end; Argo CD UI via Traefik | infra/, ansible/, clusters/ |
+
+## 2026-11-27 — rebuild fix
+- Fresh VMs run unattended-upgrades on first boot and hold the apt lock. The `common` role now waits for it to finish, and every apt task waits up to 15 min for the lock instead of 60 s.

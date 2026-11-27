@@ -44,6 +44,7 @@
 
 - name: crictl (talks to containerd; used to reach etcd)
   ansible.builtin.apt:
+    lock_timeout: 900   # fresh VMs run unattended-upgrades on first boot
     name: cri-tools
     state: present
     update_cache: true
