@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Make the sealed secret for one lab site. Prints the first admin password ONCE — save it in your password manager.
-# Usage: scripts/seal-sitekit.sh <cloudkanata|askcanada|acb|hub> <env> <admin-email> [launcher.json]
+# Usage: scripts/seal-sitekit.sh <cloudkanata|askcanada|askauthority|acb|hub> <env> <admin-email> [launcher.json]
 set -euo pipefail
 site="${1:?site}"; env="${2:?env (dev)}"; email="${3:?admin email}"; launcher="${4:-}"
-case "$site" in cloudkanata) p=ck;; askcanada) p=ask;; acb) p=acb;; hub) p=hub;; *) echo "unknown site"; exit 1;; esac
+case "$site" in cloudkanata) p=ck;; askcanada) p=ask;; askauthority) p=aa;; acb) p=acb;; hub) p=hub;; *) echo "unknown site"; exit 1;; esac
 out="apps/site-${site}/overlays/${env}/sealedsecret.yaml"
 name="${p}-sitekit-secrets"
 pw="$(openssl rand -base64 18 | tr -d '/+=' | cut -c1-20)"

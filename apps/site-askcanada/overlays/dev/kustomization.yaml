@@ -17,6 +17,12 @@ configMapGenerator:
       - SITE_NAME=Ask Canada (lab)
       - SITE_COLOR=#c8102e
       - PGHOST=ask-sitekit-db
+      - MODULES=qa              # community Q&A at /qa (apps/sitekit/app/sitekit/mod_qa.py)
+      - SELF_SIGNUP=true
+      - SIGNUP_ROLE=member
+      - TZ=America/Toronto
+      - 'ROLES=["admin", "staff", "member"]'
+      - 'MODULE_CONFIG={"qa": {"categories": ["Immigration & visas", "Work & jobs", "Taxes & benefits", "Health care", "Housing", "Driving & transport", "Education", "Travel & passports", "Money & banking", "Other"], "official_domains": ["canada.ca", "gc.ca", "ontario.ca", "servicecanada.gc.ca"], "intro": "Ask about life in Canada. Answers marked Official come from Ask Canada and link to a Government of Canada source."}}'
       - 'FORMS={"question":{"title":"Ask a question","fields":[["name","Your name",false],["email","Email",true],["country","Country you are from",false],["question","Your question",true]]}}'
 images:
   - name: ghcr.io/planb438/sitekit
