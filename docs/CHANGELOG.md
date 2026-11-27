@@ -4,6 +4,7 @@ Newest first. One line per change that affects what runs or how to use it. Updat
 
 | Date | Change | Where |
 | --- | --- | --- |
+| 2026-11-27 | Admin portals: ACB field-service admin, Ask Canada / Ask Authority community Q&A (new aa.dev.lab.local), CloudKanata tenant ops panel with RBAC + admission guard; two-step login for admins | apps/sitekit, apps/site-* |
 | 2026-11-26 | Lab guide added to the repo; PR checklist + docs reminder workflow | docs/, .github/ |
 | 2026-11-26 | Nightly HQ Google Sheets backup (setup pending: service account) | apps/hq-backup |
 | 2026-11-26 | ParkingClub lab copy at pc.dev.lab.local (real Worker in workerd, test Stripe only, no email) | apps/parkingclub-lab |

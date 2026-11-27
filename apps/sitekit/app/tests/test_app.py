@@ -22,6 +22,19 @@ def login(c, email, pw):
     return c.post("/app/login", data={"email": email, "password": pw, "next": "/app"}, follow_redirects=False)
 
 
+def enroll_2fa(c):
+    from sitekit import security
+    r = c.get("/app/account/2fa")
+    secret = re.search(r'name="secret" value="([A-Z2-7]+)"', r.text).group(1)
+    c.post("/app/account/2fa", data={"secret": secret, "code": security.totp_code(secret), "csrf": csrf(r.text)})
+    return secret
+
+
+def admin_in(c):
+    assert login(c, "admin@example.com", "admin-password-123").status_code == 303
+    return enroll_2fa(c)
+
+
 def csrf(html):
     return re.search(r'name="csrf" value="([0-9a-f]+)"', html).group(1)
 
@@ -46,6 +59,8 @@ def test_public_form_to_inbox_and_roles(client):
     r = client.post("/app/forms/quote", data={"name": "Sam", "email": "sam@x.com", "details": "snow plan"}, follow_redirects=False)
     assert r.status_code == 303
     assert login(client, "admin@example.com", "admin-password-123").status_code == 303
+    assert "/app/account/2fa" in client.get("/app", follow_redirects=False).headers["location"]
+    enroll_2fa(client)
     home = client.get("/app").text
     assert "1</b> new form submission" in home and "HQ" in home
     inbox = client.get("/app/inbox").text
@@ -72,9 +87,29 @@ def test_public_form_to_inbox_and_roles(client):
 
 def test_honeypot(client):
     client.post("/app/forms/quote", data={"name": "zz-honeypot", "email": "b@x.com", "website": "spam"})
-    login(client, "admin@example.com", "admin-password-123")
+    admin_in(client)
     assert "zz-honeypot" not in client.get("/app/inbox").text
 
 
 def test_git_dir_hidden(client):
     assert client.get("/.git").status_code == 404
+
+
+def test_two_step_login(client):
+    from sitekit import security
+    secret = admin_in(client)
+    client.cookies.clear()
+    r = login(client, "admin@example.com", "admin-password-123")
+    assert "/app/login/2fa" in r.headers["location"]
+    p = r.headers["location"].split("p=")[1]
+    assert "match. Try the newest" in client.post("/app/login/2fa", data={"p": p, "code": "000000"}).text
+    r = client.post("/app/login/2fa", data={"p": p, "code": security.totp_code(secret)}, follow_redirects=False)
+    assert r.status_code == 303 and "Welcome" in client.get("/app").text
+
+
+def test_totp_known_vector():
+    from sitekit import security
+    # RFC 6238 SHA-1 test secret "12345678901234567890", T=59 -> 94287082 (last 6 digits 287082)
+    import base64
+    s = base64.b32encode(b"12345678901234567890").decode()
+    assert security.totp_code(s, 59) == "287082"

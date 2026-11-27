@@ -20,6 +20,12 @@ class Settings:
     launcher: list = field(default_factory=list)
     secure_cookies: bool = True
     session_hours: int = 12
+    modules: list = field(default_factory=list)
+    staff_roles: list = field(default_factory=lambda: ["admin", "staff"])
+    require_2fa_roles: list = field(default_factory=lambda: ["admin"])
+    self_signup: bool = False
+    signup_role: str = "member"
+    module_config: dict = field(default_factory=dict)
 
 
 def from_env() -> Settings:
@@ -36,4 +42,10 @@ def from_env() -> Settings:
         launcher=json.loads(e("LAUNCHER", "[]")),
         secure_cookies=e("SECURE_COOKIES", "true").lower() == "true",
         session_hours=int(e("SESSION_HOURS", "12")),
+        modules=[m.strip() for m in e("MODULES", "").split(",") if m.strip()],
+        staff_roles=json.loads(e("STAFF_ROLES", '["admin","staff"]')),
+        require_2fa_roles=json.loads(e("REQUIRE_2FA_ROLES", '["admin"]')),
+        self_signup=e("SELF_SIGNUP", "false").lower() == "true",
+        signup_role=e("SIGNUP_ROLE", "member"),
+        module_config=json.loads(e("MODULE_CONFIG", "{}")),
     )

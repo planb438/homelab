@@ -9,6 +9,8 @@ resources:
   - ../../../sitekit/base
   - ingress.yaml
   - sealedsecret.yaml      # made by: scripts/seal-sitekit.sh cloudkanata dev <your-email>
+  - ops-rbac.yaml           # what the ops panel may do in the cluster
+  - ops-guard.yaml          # ...and the cluster-side rule that limits it to tenant namespaces
 configMapGenerator:
   - name: sitekit-config
     literals:
@@ -17,6 +19,9 @@ configMapGenerator:
       - SITE_NAME=CloudKanata (lab)
       - SITE_COLOR=#0b6bcb
       - PGHOST=ck-sitekit-db
+      - MODULES=ops             # tenant ops panel at /ops (apps/sitekit/app/sitekit/mod_ops.py)
+      - TZ=America/Toronto
+      - 'MODULE_CONFIG={"ops": {"grace_days": 14, "grafana_url": "", "billing_url": "", "ingress_namespace": "traefik"}}'
       - 'FORMS={"contact":{"title":"Contact CloudKanata","fields":[["name","Your name",true],["email","Email",true],["company","Company",false],["message","How can we help?",true]]}}'
 images:
   - name: ghcr.io/planb438/sitekit
@@ -28,6 +33,8 @@ patches:
       - {op: replace, path: /spec/template/spec/containers/0/envFrom/1/secretRef/name, value: ck-sitekit-secrets}
       - {op: replace, path: /spec/template/spec/containers/0/env/4/valueFrom/secretKeyRef/name, value: ck-sitekit-secrets}
       - {op: add, path: /spec/template/spec/containers/0/imagePullPolicy, value: Always}
+      - {op: add, path: /spec/template/spec/serviceAccountName, value: sitekit-ops}
+      - {op: replace, path: /spec/template/spec/automountServiceAccountToken, value: true}
   - target: {kind: StatefulSet, name: sitekit-db}
     patch: |-
       - {op: replace, path: /spec/template/spec/containers/0/env/3/valueFrom/secretKeyRef/name, value: ck-sitekit-secrets}

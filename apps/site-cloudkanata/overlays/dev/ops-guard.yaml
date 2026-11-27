@@ -1,0 +1,37 @@
+# Belt and braces: even with the ClusterRole above, the API server refuses any change by the ops panel
+# outside namespaces named t-* and labelled cloudkanata.io/tenant. Kustomize prefixes the names with "ck-".
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: sitekit-ops-tenants-only
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+      - apiGroups: ["*"]
+        apiVersions: ["*"]
+        operations: [CREATE, UPDATE, DELETE]
+        resources: ["*", "*/*"]
+  matchConditions:
+    - name: only-the-ops-panel
+      expression: "request.userInfo.username == 'system:serviceaccount:dev:ck-sitekit-ops'"
+  validations:
+    - expression: >-
+        request.resource.resource != 'namespaces' ||
+        ((request.operation == 'DELETE' ? oldObject : object).metadata.name.startsWith('t-') &&
+        has((request.operation == 'DELETE' ? oldObject : object).metadata.labels) &&
+        'cloudkanata.io/tenant' in (request.operation == 'DELETE' ? oldObject : object).metadata.labels)
+      message: The ops panel may only manage namespaces named t-* that carry the cloudkanata.io/tenant label.
+    - expression: >-
+        request.resource.resource == 'namespaces' ||
+        (namespaceObject != null && has(namespaceObject.metadata.labels) &&
+        'cloudkanata.io/tenant' in namespaceObject.metadata.labels)
+      message: The ops panel may only change things inside tenant namespaces.
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: sitekit-ops-tenants-only
+spec:
+  policyName: ck-sitekit-ops-tenants-only
+  validationActions: [Deny]

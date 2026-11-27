@@ -19,6 +19,8 @@ SCHEMA = [
     """CREATE TABLE IF NOT EXISTS audit (
         id SERIAL PRIMARY KEY, actor TEXT NOT NULL, action TEXT NOT NULL, detail TEXT NOT NULL DEFAULT '',
         created TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP)""",
+    """CREATE TABLE IF NOT EXISTS mfa_pending (
+        token TEXT PRIMARY KEY, user_id INTEGER NOT NULL, next TEXT NOT NULL DEFAULT '/app', expires TIMESTAMP NOT NULL)""",
     """CREATE TABLE IF NOT EXISTS hits (
         key TEXT NOT NULL, at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP)""",
 ]
@@ -73,9 +75,21 @@ class Store:
             c.execute(self._sql(q), args)
             return [dict(r) for r in c.fetchall()]
 
-    def migrate(self):
-        for q in SCHEMA:
+    def migrate(self, extra=()):
+        for q in list(SCHEMA) + list(extra):
             self.run(q)
+        self.add_column("users", "totp_secret", "TEXT NOT NULL DEFAULT ''")
+
+    def add_column(self, table, col, decl):
+        try:
+            if self.sqlite:
+                cols = [r["name"] for r in self.all(f"PRAGMA table_info({table})")]
+                if col not in cols:
+                    self.run(f"ALTER TABLE {table} ADD COLUMN {col} {decl}")
+            else:
+                self.run(f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {col} {decl}")
+        except Exception:
+            pass
 
 
 def from_env() -> Store:

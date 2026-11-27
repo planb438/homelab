@@ -17,6 +17,10 @@ configMapGenerator:
       - SITE_NAME=ACB Landscaping (lab)
       - SITE_COLOR=#2e7d32
       - PGHOST=acb-sitekit-db
+      - MODULES=acb             # ACB admin: clients, quotes, schedule, crews, invoices (apps/sitekit/app/sitekit/mod_acb.py)
+      - TZ=America/Toronto
+      - 'ROLES=["admin", "staff", "crew", "client"]'
+      - 'MODULE_CONFIG={"acb": {"company": "ACB Landscaping", "phone": "416-319-8599", "tax_rate": 0.13, "tax_name": "HST", "review_url": "", "timezone": "America/Toronto"}}'
       - 'FORMS={"quote":{"title":"Request a quote","fields":[["name","Your name",true],["phone","Phone",true],["email","Email",true],["address","Property address",true],["service","Service (snow, lawn, cleanup…)",true],["details","Details",false]]}}'
 images:
   - name: ghcr.io/planb438/sitekit

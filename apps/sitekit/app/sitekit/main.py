@@ -1,6 +1,7 @@
 """sitekit: serves a site's real files (synced from its Git repo) and adds a private /app area:
 logins with roles, invite-only sign-up, public forms saved to PostgreSQL, a staff inbox and user admin."""
-import html, json, os
+import html, importlib, json, os
+from types import SimpleNamespace
 from datetime import datetime, timedelta, timezone
 from fastapi import FastAPI, Request, Form
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse, PlainTextResponse
@@ -12,7 +13,9 @@ S = config.from_env()
 DB = store.from_env()
 app = FastAPI(title=f"sitekit · {S.site_name}", docs_url=None, redoc_url=None, openapi_url=None)
 COOKIE = "sk_session"
-STAFF = {"admin", "staff"}
+STAFF = set(S.staff_roles)
+NAV = []   # (label, href, roles or None) added by modules
+TWOFA_FREE = ("/app/account", "/app/logout", "/app/login")
 esc = html.escape
 
 
@@ -45,7 +48,7 @@ def current_user(request: Request):
     t = request.cookies.get(COOKIE)
     if not t:
         return None, None
-    row = DB.one("SELECT u.id, u.email, u.name, u.role, u.active, s.expires FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.token = %s", (t,))
+    row = DB.one("SELECT u.id, u.email, u.name, u.role, u.active, u.totp_secret, s.expires FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.token = %s", (t,))
     if not row or not row["active"] or row["expires"] < now():
         return None, None
     return row, t
@@ -72,6 +75,9 @@ def page(title, body, user=None, csrf=""):
             links.append('<a href="/app/inbox">Inbox</a>')
         if user["role"] == "admin":
             links.append('<a href="/app/users">Users</a>')
+        for label, href, roles in NAV:
+            if roles is None or user["role"] in roles:
+                links.append(f'<a href="{href}">{esc(label)}</a>')
         links.append('<a href="/app/account">My account</a>')
         links.append(f'<form method="post" action="/app/logout" class="inline"><input type="hidden" name="csrf" value="{csrf}"><button class="link">Log out</button></form>')
         nav = f'<nav>{"".join(links)}<span class="who">{esc(user["name"] or user["email"])} · {esc(user["role"])}</span></nav>'
@@ -79,7 +85,7 @@ def page(title, body, user=None, csrf=""):
 <meta name="robots" content="noindex"><title>{esc(title)} · {esc(S.site_name)}</title>
 <style>:root{{--c:{esc(S.color)}}}*{{box-sizing:border-box}}body{{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:#f5f7fa;color:#14202e}}
 header{{background:var(--c);color:#fff;padding:.8rem 1.2rem;display:flex;gap:1rem;align-items:center}}header a{{color:#fff;text-decoration:none;font-weight:700}}
-main{{max-width:980px;margin:1.2rem auto;padding:0 1rem}}nav{{display:flex;gap:1rem;align-items:center;flex-wrap:wrap;margin-bottom:1rem}}nav .who{{margin-left:auto;color:#5b6b80;font-size:.9rem}}
+main{{max-width:1120px;margin:1.2rem auto;padding:0 1rem}}nav{{display:flex;gap:1rem;align-items:center;flex-wrap:wrap;margin-bottom:1rem}}nav .who{{margin-left:auto;color:#5b6b80;font-size:.9rem}}
 .card{{background:#fff;border:1px solid #e3e8ef;border-radius:12px;padding:1rem 1.2rem;margin-bottom:.8rem}}label{{display:block;font-size:.85rem;color:#5b6b80;margin:.6rem 0 .2rem}}
 input,select,textarea{{width:100%;padding:.55rem;border:1px solid #d5dbe3;border-radius:8px;font:inherit}}button{{background:var(--c);color:#fff;border:0;border-radius:8px;padding:.6rem 1rem;font:inherit;font-weight:600;cursor:pointer;margin-top:.8rem}}
 button.link{{background:none;color:var(--c);padding:0;margin:0;font-weight:500}}.inline{{display:inline}}.err{{color:#a12626}}.ok{{color:#12805c}}table{{width:100%;border-collapse:collapse}}td,th{{text-align:left;padding:.45rem;border-bottom:1px solid #eef1f5;font-size:.92rem;vertical-align:top}}
@@ -92,6 +98,9 @@ def need(request: Request, roles=None):
     user, t = current_user(request)
     if not user:
         return None, None, RedirectResponse("/app/login?next=" + request.url.path, 303)
+    if (user["role"] in S.require_2fa_roles and not user.get("totp_secret")
+            and not request.url.path.startswith(TWOFA_FREE)):
+        return None, None, RedirectResponse("/app/account/2fa?required=1", 303)
     if roles and user["role"] not in roles:
         return None, None, page("Not allowed", '<p class="err">Your role can\'t open this page.</p>', user, security.csrf_for(S.secret_key, t))
     return user, t, None
@@ -113,7 +122,7 @@ def login_form(next: str = "/app", err: str = ""):
     return page("Log in", f"""{msg}<form method="post" class="card"><input type="hidden" name="next" value="{esc(next)}">
 <label>Email</label><input name="email" type="email" autocomplete="username" required>
 <label>Password</label><input name="password" type="password" autocomplete="current-password" required><button>Log in</button></form>
-<p class="muted">No account? Ask an admin for an invite link.</p>""")
+<p class="muted">{'No account? <a href="/app/signup">Create one</a>.' if S.self_signup else 'No account? Ask an admin for an invite link.'}</p>""")
 
 
 @app.post("/app/login")
@@ -121,16 +130,49 @@ def login(request: Request, email: str = Form(...), password: str = Form(...), n
     email = email.strip().lower()
     if limited(f"login:{email}", 6, 15) or limited(f"loginip:{client_ip(request)}", 30, 15):
         return login_form(next, "Too many tries. Wait 15 minutes.")
-    u = DB.one("SELECT id, pw_hash, active FROM users WHERE email = %s", (email,))
+    u = DB.one("SELECT id, pw_hash, active, totp_secret FROM users WHERE email = %s", (email,))
     if not u or not u["active"] or not security.check_password(password, u["pw_hash"]):
         audit(email, "login_failed", client_ip(request))
         return login_form(next, "Wrong email or password.")
+    if u["totp_secret"]:
+        p = security.token()
+        DB.run("INSERT INTO mfa_pending (token, user_id, next, expires) VALUES (%s, %s, %s, %s)", (p, u["id"], next, now() + timedelta(minutes=5)))
+        return RedirectResponse(f"/app/login/2fa?p={p}", 303)
+    return start_session(request, u["id"], email, next)
+
+
+def safe_next(next):
+    return next if next.startswith("/app") or next.startswith("/qa") or next.startswith("/ops") else "/app"
+
+
+def start_session(request, uid, email, next):
     t = security.token()
-    DB.run("INSERT INTO sessions (token, user_id, expires) VALUES (%s, %s, %s)", (t, u["id"], now() + timedelta(hours=S.session_hours)))
+    DB.run("INSERT INTO sessions (token, user_id, expires) VALUES (%s, %s, %s)", (t, uid, now() + timedelta(hours=S.session_hours)))
     audit(email, "login", client_ip(request))
-    r = RedirectResponse(next if next.startswith("/app") else "/app", 303)
+    r = RedirectResponse(safe_next(next), 303)
     r.set_cookie(COOKIE, t, httponly=True, secure=S.secure_cookies, samesite="lax", max_age=S.session_hours * 3600, path="/")
     return r
+
+
+@app.get("/app/login/2fa")
+def twofa_form(p: str = "", err: str = ""):
+    msg = f'<p class="err">{esc(err)}</p>' if err else ""
+    return page("Two-step check", f"""{msg}<form method="post" class="card"><input type="hidden" name="p" value="{esc(p)}">
+<label>6-digit code from your authenticator app</label><input name="code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" required autofocus><button>Continue</button></form>""")
+
+
+@app.post("/app/login/2fa")
+def twofa(request: Request, p: str = Form(...), code: str = Form(...)):
+    row = DB.one("SELECT m.user_id, m.next, m.expires, u.email, u.totp_secret FROM mfa_pending m JOIN users u ON u.id = m.user_id WHERE m.token = %s", (p,))
+    if not row or row["expires"] < now():
+        return login_form("/app", "That step expired. Log in again.")
+    if limited(f"2fa:{row['user_id']}", 6, 15):
+        return twofa_form(p, "Too many tries. Wait 15 minutes.")
+    if not security.totp_ok(row["totp_secret"], code):
+        audit(row["email"], "2fa_failed", client_ip(request))
+        return twofa_form(p, "That code didn't match. Try the newest one.")
+    DB.run("DELETE FROM mfa_pending WHERE token = %s", (p,))
+    return start_session(request, row["user_id"], row["email"], row["next"])
 
 
 @app.post("/app/logout")
@@ -307,6 +349,80 @@ def register(t: str = Form(...), name: str = Form(""), email: str = Form(...), p
     return RedirectResponse("/app/login", 303)
 
 
+@app.get("/app/account/2fa")
+def twofa_setup(request: Request, required: int = 0, err: str = ""):
+    user, t, deny = need(request)
+    if deny:
+        return deny
+    csrf = security.csrf_for(S.secret_key, t)
+    if user.get("totp_secret"):
+        return page("Two-step login", f"""<p class="ok">Two-step login is ON for your account.</p>
+<form method="post" action="/app/account/2fa/off" class="card"><input type="hidden" name="csrf" value="{csrf}">
+<label>To turn it off, enter a current code</label><input name="code" inputmode="numeric" maxlength="6" required><button>Turn off</button></form>""", user, csrf)
+    secret = security.totp_secret()
+    uri = f"otpauth://totp/{esc(S.site_name)}:{esc(user['email'])}?secret={secret}&issuer={esc(S.site_name)}"
+    note = '<p class="err">Your role needs two-step login. Set it up to continue.</p>' if required else ""
+    msg = f'<p class="err">{esc(err)}</p>' if err else ""
+    return page("Set up two-step login", f"""{note}{msg}<div class="card"><ol>
+<li>Open Google Authenticator, Microsoft Authenticator, 1Password or Authy.</li>
+<li>Add an account → <b>enter a setup key</b>. Key: <code style="font-size:1.1rem">{secret}</code> (time-based).</li>
+<li>Type the 6-digit code it shows.</li></ol><p class="muted">Or open this on your phone: <a href="{uri}">{uri[:60]}…</a></p>
+<form method="post"><input type="hidden" name="csrf" value="{csrf}"><input type="hidden" name="secret" value="{secret}">
+<label>6-digit code</label><input name="code" inputmode="numeric" maxlength="6" required><button>Turn on</button></form></div>""", user, csrf)
+
+
+@app.post("/app/account/2fa")
+def twofa_enable(request: Request, secret: str = Form(...), code: str = Form(...), csrf: str = Form("")):
+    user, t, deny = need(request)
+    if deny:
+        return deny
+    if not check_csrf(t, csrf) or not security.totp_ok(secret, code):
+        return RedirectResponse("/app/account/2fa?err=Code+didn%27t+match.+Scan+the+new+key+and+try+again", 303)
+    DB.run("UPDATE users SET totp_secret = %s WHERE id = %s", (secret, user["id"]))
+    audit(user["email"], "2fa_on")
+    return RedirectResponse("/app", 303)
+
+
+@app.post("/app/account/2fa/off")
+def twofa_disable(request: Request, code: str = Form(...), csrf: str = Form("")):
+    user, t, deny = need(request)
+    if deny:
+        return deny
+    if check_csrf(t, csrf) and security.totp_ok(user["totp_secret"], code):
+        DB.run("UPDATE users SET totp_secret = '' WHERE id = %s", (user["id"],))
+        audit(user["email"], "2fa_off")
+    return RedirectResponse("/app/account/2fa", 303)
+
+
+@app.get("/app/signup")
+def signup_form(err: str = "", next: str = "/app"):
+    if not S.self_signup:
+        return page("Sign up", "<p>Sign-up is by invite only on this site.</p>")
+    msg = f'<p class="err">{esc(err)}</p>' if err else ""
+    return page("Create an account", f"""{msg}<form method="post" class="card"><input type="hidden" name="next" value="{esc(next)}">
+<label>Display name</label><input name="name" maxlength="40" required><label>Email</label><input name="email" type="email" required>
+<label>Password (10+ characters)</label><input name="password" type="password" autocomplete="new-password" required>
+<input name="website" style="display:none" tabindex="-1" autocomplete="off"><button>Create account</button></form>
+<p class="muted">Already have one? <a href="/app/login">Log in</a></p>""")
+
+
+@app.post("/app/signup")
+def signup(request: Request, name: str = Form(...), email: str = Form(...), password: str = Form(...), website: str = Form(""), next: str = Form("/app")):
+    if not S.self_signup or website:
+        return RedirectResponse("/app/login", 303)
+    if limited(f"signup:{client_ip(request)}", 5, 60):
+        return signup_form("Too many sign-ups from your connection. Try later.")
+    email = email.strip().lower()
+    if len(password) < 10:
+        return signup_form("Use at least 10 characters.", next)
+    if DB.one("SELECT id FROM users WHERE email = %s", (email,)):
+        return signup_form("That email already has an account.", next)
+    DB.run("INSERT INTO users (email, name, role, pw_hash) VALUES (%s, %s, %s, %s)", (email, name.strip()[:40], S.signup_role, security.hash_password(password)))
+    audit(email, "signup", client_ip(request))
+    u = DB.one("SELECT id FROM users WHERE email = %s", (email,))
+    return start_session(request, u["id"], email, next)
+
+
 @app.get("/app/account")
 def account(request: Request, ok: int = 0, err: str = ""):
     user, t, deny = need(request)
@@ -342,6 +458,13 @@ def stats(request: Request):
     return {"site": S.site_name, "users": DB.one("SELECT COUNT(*) AS n FROM users")["n"],
             "submissions": DB.all("SELECT status, COUNT(*) AS n FROM submissions GROUP BY status")}
 
+
+# Site-specific modules (MODULES=acb,qa,ops) add their own pages, tables and nav links.
+CTX = SimpleNamespace(app=app, S=S, DB=DB, page=page, need=need, check_csrf=check_csrf, audit=audit, esc=esc,
+                      now=now, current_user=current_user, limited=limited, client_ip=client_ip, NAV=NAV, STAFF=STAFF,
+                      csrf_for=lambda t: security.csrf_for(S.secret_key, t) if t else "")
+for _m in S.modules:
+    importlib.import_module(f"sitekit.mod_{_m}").register(CTX)
 
 # The real site (files synced from its GitHub repo by the git-sync sidecar) is served at /.
 if os.path.isdir(S.site_root):

@@ -11,6 +11,10 @@ Lab only. The live sites (GitHub Pages, Cloudflare, Stripe live) are never touch
 | parkingclub-lab | https://pc.dev.lab.local | parkingclub-site @ **dev** (private, read-only deploy key) | the real Worker in workerd, local KV, no emails, Stripe **test** only |
 | hq-backup | (nightly job) | your HQ Google Sheets | .xlsx copy of every HQ sheet, kept 30 days |
 
+## Admin portals (modules)
+`MODULES=acb` (ACB field-service admin at `/acb`), `MODULES=qa` (community Q&A at `/qa`), `MODULES=ops` (tenant ops panel at `/ops`).
+Admins must set up two-step login on first sign-in. Details: [docs/lab-guide.md](../../docs/lab-guide.md#admin-portals-sitekit-modules).
+
 ## How changes flow
 - **Site pages:** push to the site repo's `dev` branch → the lab copy updates within ~5 min (ParkingClub ~2 min).
   Happy? Merge `dev` → `main` → it goes live. Keep dev current after other changes to main:

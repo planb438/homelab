@@ -1,7 +1,7 @@
 # Your Home Lab, Explained — from libvirt to the lab sites
 
 > Living guide to this repo. **Update it in the same pull request as any change to `apps/`, `platform/`, `clusters/` or `infra/`**, and add a line to [CHANGELOG.md](CHANGELOG.md).
-> Last reviewed: 2026-11-26
+> Last reviewed: 2026-11-26 (admin portals added)
 
 ## The big picture
 
@@ -257,6 +257,7 @@ Lab versions of your sites with usernames, passwords and databases, with the liv
 | ask.dev.lab.local | Ask Canada | ask-canada, dev branch | question |
 | acb.dev.lab.local | ACB Landscaping | acb-landscaping, dev branch | quote |
 | hub.dev.lab.local | Your Hub | planb438.github.io, dev branch | private launcher for admins |
+| aa.dev.lab.local | Ask Authority | askauthority, dev branch | community Q&A (Canada, Bahamas, USA) |
 
 ### What sitekit is
 
@@ -312,6 +313,67 @@ The admin account is created only once, the first time the database is empty, so
 
 - **Never changed it?** `kubectl get secret ck-sitekit-secrets -n dev -o jsonpath='{.data.ADMIN_PASSWORD}' | base64 -d`
 - **Changed it?** Make a new hash with sitekit and write it into the `users` table with `psql`. The exact commands are in `apps/sitekit/README.md`.
+
+## Admin portals (sitekit modules)
+
+Each lab site now has an admin portal that fits its business. They are modules of sitekit, switched on per site with `MODULES=` in the site's overlay, so they share one login system, one security model and one test suite.
+
+| Site | Module | Address | Who uses it |
+| --- | --- | --- | --- |
+| ACB Landscaping | `acb` | https://acb.dev.lab.local/acb | You and office staff (everything), crew (their jobs only, no prices), clients (their quotes and invoices) |
+| Ask Canada | `qa` | https://ask.dev.lab.local/qa | Public reads; members sign up to ask, answer and vote; staff give Official answers and moderate |
+| Ask Authority (Canada, Bahamas, USA) | `qa` | https://aa.dev.lab.local/qa | Same as Ask Canada, with country categories |
+| CloudKanata | `ops` | https://ck.dev.lab.local/ops | Admins act on tenants; staff can look but not change |
+
+### Shared by every portal
+
+- **Two-step login (TOTP).** Admins must set it up on first login (`/app/account/2fa`) with Google Authenticator, Microsoft Authenticator, 1Password or Authy. Codes follow RFC 6238; no extra service or RAM needed. Other roles can turn it on too.
+- **Roles per site,** invite links for staff and crew, open sign-up only where it makes sense (the Q&A sites).
+- **CSRF tokens, rate limits, spam traps and an audit log** on every form, as before.
+
+### ACB Landscaping — field-service admin (`mod_acb.py`)
+
+| Area | What it does |
+| --- | --- |
+| Clients & properties | Address, area (from the postal code), lot size, gate code, pets, site instructions |
+| Lead pipeline | lead → quoted → active → past; one click imports website quote requests as leads |
+| Service catalog | Preset prices (mowing, cleanups, mulch, hedges, snow and salting) used by quotes |
+| Quotes | Line items + 13% HST; a private link lets the client approve (typed name) or decline online; approval creates the job |
+| Scheduling | Weekly view grouped by area with a one-tap Google Maps route per day; recurring visits (weekly, bi-weekly, monthly) create the next visit when one is done; "rain day" shifts a day's jobs to the next working day |
+| Crew | "My jobs" for the next 7 days, directions, gate code, clock in/out (with location if the phone allows), before/after photos, mark done. Crew never see prices or billing |
+| Invoices | Month-end "invoice completed jobs", sent/paid status, overdue detection, a client link, CSV export for QuickBooks or Xero |
+| Messages | Tomorrow's reminders and thank-you + Google review requests as ready-to-send texts and emails (the lab sends nothing itself) |
+| Dashboard | Recurring revenue, unpaid and overdue totals, quote conversion, jobs today/this week, estimated vs actual hours |
+
+Photos are stored in the site's database (6 MB limit each). Job photos only, never people.
+
+### Ask Authority — community Q&A (`mod_qa.py`)
+
+Ideas taken from Question2Answer (last release 2022) and rebuilt for this stack:
+
+- Questions with categories and tags, answers, up/down votes, **best answer** chosen by the asker.
+- **Official answers:** staff answers become Official only with an https link to an approved government domain (canada.ca, gc.ca, gov.bs, usa.gov…), which keeps the brand's "point to official sources" rule.
+- **Points and levels** (Newcomer → Member → Helper → Expert → Authority) and a top-contributors page.
+- **Moderation:** posts from members under 10 points wait for approval; three flags hide a post until staff review it.
+- Search, related questions by tag, view counts, a `/qa/sitemap.xml` for search engines, plain text only (no HTML from users), link limits for new members.
+
+### CloudKanata — operations panel (`mod_ops.py`)
+
+A thin, safe wrapper around the Kubernetes API for your own projects and the clients you add:
+
+1. **Tenant directory:** each tenant gets a namespace `t-<id>` with a plan (small, medium or large).
+2. **What "create" applies:** a ResourceQuota (CPU, memory, storage, pods, no LoadBalancers or NodePorts), default container limits, a NetworkPolicy that only lets Traefik and the tenant's own pods in, and the Pod Security **restricted** level.
+3. **Lifecycle buttons:** change plan, suspend (scale to zero and remember replicas), resume, quarantine (cut all traffic in and out), release, soft delete (suspended + isolated, purge only after 14 days), restore, purge, reconcile.
+4. **Guardrails:** destructive actions need the tenant id typed exactly; refusals are logged too. Every action is written to an append-only log you can export as JSON.
+5. **Support view:** read-only pods, restarts, quota use and recent warnings for a tenant, no password needed.
+6. **Billing stays outside:** a signed webhook (`/ops/hooks/billing`, HMAC with `OPS_WEBHOOK_SECRET`) sets a billing flag from Stripe or Invoice Ninja; you decide whether to suspend.
+7. **Nodes are read-only:** the panel shows health and the exact drain/uncordon commands; draining stays a deliberate command you run.
+
+**How the cluster limits the panel (defense in depth):**
+
+- Its ServiceAccount (`ck-sitekit-ops`) can touch namespaces, quotas, limits, NetworkPolicies and deployment replica counts, and nothing else: no Secrets, no pod exec, no RBAC.
+- A **ValidatingAdmissionPolicy** (`ck-sitekit-ops-tenants-only`) makes the API server refuse any change by that account outside namespaces named `t-*` with the `cloudkanata.io/tenant` label. Even a bug in the app can't touch `dev`, `argocd` or `kube-system`.
+- Tenant namespaces are created by the panel, not by Git, so Argo CD doesn't manage or prune them.
 
 ## ParkingClub lab copy and the HQ Sheets backup
 
@@ -418,6 +480,8 @@ kubectl get secret -n kube-system -l sealedsecrets.bitnami.com/sealed-secrets-ke
 | Open a site's database | `kubectl exec -it -n dev ck-sitekit-db-0 -- psql -U sitekit -d sitekit` |
 | CPU and memory | `kubectl top nodes` · `kubectl top pods -n dev` |
 | New sealed secret | `scripts/seal-sitekit.sh <site> dev <email>` |
+| Turn on two-step login | open `/app/account/2fa` on any lab site |
+| Ops panel guard in place? | `kubectl get validatingadmissionpolicy ck-sitekit-ops-tenants-only` |
 
 ### The one-minute client explanation
 
