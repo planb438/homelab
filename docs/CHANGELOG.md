@@ -23,3 +23,6 @@ Newest first. One line per change that affects what runs or how to use it. Updat
 - Bucket `cloudkanata-homelab-backups` (ca-central-1), nightly 2:30 AM, kept 30 days.
 - local-path disks can't be copied by Velero, so databases and the ParkingClub lab now dump themselves into a `backup` emptyDir before every backup. Restore: `scripts/velero-restore-db.sh`.
 - Velero's node agent now also runs on cp1.
+
+## 2026-11-27 — docs
+- Lab guide: database-dump step, Velero test results, full-rebuild walkthrough. README: status, rebuild order, keys to keep. MicroK8s marked legacy: libvirt + Terraform + Ansible/kubeadm is the only build path.

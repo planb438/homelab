@@ -1,4 +1,6 @@
-# MicroK8s option (easy add-ons)
+# MicroK8s option — legacy, not used
+
+> **Status (2026-11-27):** not used any more. The lab is built only with KVM/libvirt + Terraform + Ansible/kubeadm + Argo CD (see the README and `docs/lab-guide.md`). These notes stay for reference.
 
 Use when you want a quick single-node cluster instead of the kubeadm lab (not at the same time — RAM).
 

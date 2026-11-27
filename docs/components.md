@@ -99,10 +99,10 @@ clicked together by hand — so the same design can be rebuilt on a laptop, on E
 **Settings:** chart 93.4.1 · 7-day retention on a 10 Gi volume · ~1 GB RAM · control-plane scrapers off (kubeadm binds them to localhost) · Grafana admin via SealedSecret · https://grafana.lab.local.
 **AWS:** same chart on EKS, or Amazon Managed Prometheus/Grafana.
 
-## Velero  ·  `clusters/lab/optional/14-velero.yaml`
+## Velero  ·  `clusters/lab/apps/14-velero.yaml` (on since 2026-11-27)
 **What:** backs up Kubernetes objects **and volume data** to S3; restores namespaces or the whole cluster.
 **Why:** Git rebuilds the apps; only a backup brings back the data. Backups live **off** the cluster (S3), so losing the laptop doesn't lose them.
-**Settings:** chart 12.2.5 (Velero 1.18) · AWS plugin 1.14.4 · file-system backup (node agent, kopia) because local-path can't snapshot · nightly 2:30 AM, kept 30 days · IAM user limited to one bucket · keys sealed.
+**Settings:** chart 12.2.5 (Velero 1.18) · AWS plugin 1.14.4 · file-system backup (node agent, kopia) because local-path can't snapshot · nightly 2:30 AM, kept 30 days · IAM user limited to one bucket · keys sealed · bucket `cloudkanata-homelab-backups` (ca-central-1) · databases dumped by pre-backup hooks (local-path disks are hostPath, which Velero skips) until the lab moves to NFS · node agent also on cp1.
 **AWS:** same; on EKS use IRSA instead of keys and EBS snapshots.
 
 ---

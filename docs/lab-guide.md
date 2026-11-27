@@ -473,6 +473,38 @@ It creates a **private, encrypted, versioned** bucket, an IAM user `velero-homel
 
 Note: Velero backups contain your Secrets as the API returns them (decrypted), which is why the bucket is private and encrypted, and the IAM user is limited to it.
 
+**Why the databases need an extra step.** The lab's storage (local-path) creates each disk as a `hostPath` folder on a node, and Velero's file copy skips those. The first full backup (`first-test`) saved all 1,029 objects but skipped every database disk. So each database pod (sitekit-db, civic-hub-db) and the ParkingClub lab carry a **pre-backup hook**: right before a backup, `pg_dump` (or `tar` for ParkingClub's data) writes into a small `backup` folder (an emptyDir) that Velero does copy. A restore brings back the apps plus that dump; `bash scripts/velero-restore-db.sh dev` loads it. When the lab moves to NFS storage, Velero can copy the disks directly and this step goes away.
+
+**Tested Nov 27, 2026:**
+
+| Test | Result |
+| --- | --- |
+| `velero backup create test-2 --include-namespaces dev` | Completed: 279 items, 25 volumes, 7 of 7 database hooks ran |
+| Delete a namespace (`velero-test`), then `velero restore create --from-backup demo-backup` | Namespace and pod back, Running, in under 30 seconds |
+
+Velero's node agent runs on all three nodes (it tolerates the control-plane taint), so pods on cp1 can be backed up too.
+
+### 5. Starting over: the full rebuild test
+
+The real proof of a GitOps lab is deleting everything and getting it back. On Nov 27, 2026 the VMs were destroyed and rebuilt from the repo:
+
+```bash
+cd infra/libvirt && terraform apply                    # 3 fresh VMs
+cd ../../ansible && ansible-playbook site.yml          # cluster + encryption + audit + CIS report
+cd .. && export KUBECONFIG=$PWD/ansible/kubeconfig-lab
+grep -vE '^\s+(resourceVersion|uid|creationTimestamp):' ~/homelab-keys/sealed-secrets-key.yaml | kubectl apply -f -
+bash scripts/bootstrap-argocd.sh                        # Argo CD installs everything else from Git
+```
+
+Two problems found and fixed on the way, both now handled by the playbook:
+
+| Problem | Why | Fix |
+| --- | --- | --- |
+| Ansible "No route to host" | It started 2 seconds after Terraform, while the VMs were still booting | `site.yml` first waits up to 10 minutes for SSH |
+| `Unable to acquire the dpkg frontend lock` on w1 | A fresh Ubuntu VM runs automatic security updates on first boot | The `common` role waits for them; every apt step waits up to 15 minutes for the lock |
+
+After the rebuild: trust the new lab CA in your browser again, set up 2FA again on the lab sites (new databases), and save the new `~/homelab-keys/encryption-config.yaml`.
+
 ## CI/CD: from a commit to a running pod
 
 **CI** (GitHub Actions) tests and builds. **CD** (Argo CD) deploys.

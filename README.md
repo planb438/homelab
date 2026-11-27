@@ -1,6 +1,8 @@
 # homelab — lab → dev / stage / prod with GitOps
 
-**Last updated: 2026-11-18** · Status: cluster builds end-to-end on Ubuntu 26.04 (tested by Adari, Nov 18 2026) · Argo CD UI working via Traefik
+**Last updated: 2026-11-27** · Status: full rebuild from scratch tested Nov 27 2026 (VMs → cluster → hardening → Argo CD → apps) · encryption at rest + audit log + CIS report · Velero nightly to AWS S3, restore tested
+
+**Build process:** KVM/libvirt VMs (Terraform) → kubeadm (Ansible) → Argo CD. This is the only supported way to build the lab; the old MicroK8s notes are kept in `docs/microk8s.md` for reference only.
 
 **Docs:** [**Lab guide — every layer explained**](docs/lab-guide.md) · [Changelog](docs/CHANGELOG.md) · [Platform components (what / why / settings / AWS)](docs/components.md) · [Labs](labs/README.md) · [Civic Hub (Ask Canada)](apps/civic-hub/README.md) · [AWS plan](docs/aws.md) · Tracking: Homelab HQ (Google Sheet, CloudKanata Drive)
 
@@ -89,10 +91,12 @@ New app = add an `Ingress` with `ingressClassName: traefik` and a host, then add
 **Rebuild order:** `terraform apply` → `ansible-playbook site.yml` → restore the sealing key with
 `grep -vE '^\s+(resourceVersion|uid|creationTimestamp):' ~/homelab-keys/sealed-secrets-key.yaml | kubectl apply -f -`
 (from your password manager) → `bash scripts/bootstrap-argocd.sh` → wait for Synced →
-`velero restore create --from-backup <latest> --wait` (`docs/aws-velero.md`).
+`velero restore create --from-backup <latest> --wait` → `bash scripts/velero-restore-db.sh dev` to load the database dumps (`docs/aws-velero.md`).
+
+**Keep these two files off the laptop** (password manager): `~/homelab-keys/sealed-secrets-key.yaml` and `~/homelab-keys/encryption-config.yaml`. The second changes on every rebuild.
 
 **Optional platform apps** (`clusters/lab/optional/`): monitoring (`bash scripts/setup-monitoring.sh`) and
-Velero backups to S3 (`bash scripts/setup-velero.sh <bucket> <region>`). Each script seals its secret and enables the app.
+Velero backups to S3 (`bash scripts/aws-velero-bootstrap.sh <bucket> <region>` creates the bucket, IAM user and sealed key in one go). Each script seals its secret and enables the app. **Velero is on** since 2026-11-27 (bucket `cloudkanata-homelab-backups`, ca-central-1).
 
 ## Moving to AWS later
 See `docs/aws.md`. Keep `apps/` and `policies/` as they are; add `clusters/eks` and `infra/aws`
@@ -160,7 +164,7 @@ CKS labs and your own low-stakes tools. Do not put clients' data here yet.
 | Production-grade already | Gap on this laptop | Fix (in order) |
 |---|---|---|
 | GitOps: every change reviewed, versioned, reversible | 1 control plane — if cp1 dies, the cluster can't be managed | 3 control planes, or EKS (managed control plane) |
-| CI validates every PR | local-path storage: data lives on one worker; lose w1 = lose its volumes | Velero + MinIO backups **copied off the laptop**; later Longhorn or EBS (gp3) |
+| CI validates every PR | local-path storage: data lives on one worker; lose w1 = lose its volumes | Velero nightly to AWS S3 (on, restore tested); next NFS so Velero can copy volumes directly; later Longhorn or EBS (gp3) |
 | Policies (Kyverno), NetworkPolicy (Calico) | 11 GB RAM, laptop CPU, home power & internet | a VPS or EKS for real prod |
 | Rebuild from scratch in ~20 min | private NAT network — not reachable from the internet | Cloudflare Tunnel for safe public access |
 | Snapshots / reset scripts | no monitoring or alerts yet | Prometheus + Grafana + alerting (prod overlay only) |
@@ -171,6 +175,7 @@ and thanks to this repo, moving it there is a new `clusters/eks` folder, not a r
 ## Changelog
 | Date | Change |
 |---|---|
+| 2026-11-27 | Security pass (encryption at rest, audit log, kube-bench before/after); full rebuild from scratch tested (waits for VM boot and apt lock); Velero on AWS S3 with database dumps, restore tested; libvirt is the only build path (MicroK8s retired). Details: `docs/CHANGELOG.md` |
 | 2026-11-19 (pm) | Optional platform apps: kube-prometheus-stack 93.4.1 (Grafana at grafana.lab.local) and Velero 12.2.5 → S3 nightly; setup scripts; `docs/aws-velero.md`; rebuild/data guide; sealed-secrets Helm URL fixed |
 | 2026-11-19 | Civic Hub v0.1.0 (Ask Canada): Python collectors for IRCC, Canada.ca news, StatCan, Bank of Canada, open.canada.ca → PostgreSQL with change tracking + history; public page; Grafana; image CI to GHCR; `seal-civic-hub.sh` |
 | 2026-11-18 (eve) | Labs 01–06 (pod security, network policy, sealed secrets, ingress+TLS, RBAC, supply chain) rebuilt from old repos; Sealed Secrets + lab CA; `docs/components.md`; `scripts/versions.sh`; old repos tagged `backup-2026-11-18` |
