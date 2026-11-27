@@ -19,6 +19,13 @@ spec:
   template:
     metadata:
       labels: {app.kubernetes.io/name: sitekit-db}
+      annotations:
+        # Velero can't copy local-path (hostPath) disks, so just before each backup the data is dumped
+        # into the small 'backup' folder below, which Velero CAN copy. Restore: docs/aws-velero.md
+        pre.hook.backup.velero.io/container: postgres
+        pre.hook.backup.velero.io/command: '["/bin/sh","-c","pg_dump -U sitekit -d sitekit -Fc -f /backup/db.dump.tmp && mv /backup/db.dump.tmp /backup/db.dump"]'
+        pre.hook.backup.velero.io/timeout: 5m
+        backup.velero.io/backup-volumes-excludes: data
     spec:
       automountServiceAccountToken: false
       securityContext:
@@ -44,6 +51,9 @@ spec:
             allowPrivilegeEscalation: false
           volumeMounts:
             - {name: data, mountPath: /var/lib/postgresql/data}
+            - {name: backup, mountPath: /backup}
+      volumes:
+        - {name: backup, emptyDir: {sizeLimit: 500Mi}}
   volumeClaimTemplates:
     - metadata: {name: data}
       spec:

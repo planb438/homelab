@@ -37,6 +37,8 @@ spec:
             requests: {cpu: 50m, memory: 128Mi}
             limits: {memory: 512Mi}
           nodeAgent:
+            tolerations:                      # also run on cp1 so its pods can be backed up
+              - {key: node-role.kubernetes.io/control-plane, operator: Exists, effect: NoSchedule}
             resources:
               requests: {cpu: 50m, memory: 128Mi}
               limits: {memory: 768Mi}

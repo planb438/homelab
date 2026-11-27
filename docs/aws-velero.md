@@ -53,3 +53,11 @@ A few GB of backups in S3 Standard ≈ well under $1/month. Set an **AWS Budget 
 1. Restore the Sealed Secrets key **before** bootstrapping Argo CD:
    `kubectl apply -f sealed-secrets-key.yaml` (from your password manager), then run `bootstrap-argocd.sh`.
 2. Once Velero is Synced: `velero restore create --from-backup <name> --include-namespaces dev,prod --wait`.
+3. Load the databases back: `bash scripts/velero-restore-db.sh dev` (and `prod` if used).
+
+## Why databases need step 3
+The lab's local-path disks are `hostPath` volumes, which Velero's file copy skips. So every database pod
+(sitekit-db, civic-hub-db) and the ParkingClub lab carry a **pre-backup hook**: right before a backup,
+`pg_dump` (or `tar` for ParkingClub's KV) writes into a small emptyDir called `backup`, which Velero does copy.
+A restore brings the apps back with empty disks plus that dump; step 3 loads it.
+This goes away once the lab moves to NFS (or another storage Velero can copy).

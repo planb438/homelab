@@ -18,3 +18,8 @@ Newest first. One line per change that affects what runs or how to use it. Updat
 
 ## 2026-11-27 — rebuild fix
 - Fresh VMs run unattended-upgrades on first boot and hold the apt lock. The `common` role now waits for it to finish, and every apt task waits up to 15 min for the lock instead of 60 s.
+
+## 2026-11-27 — Velero on (AWS S3)
+- Bucket `cloudkanata-homelab-backups` (ca-central-1), nightly 2:30 AM, kept 30 days.
+- local-path disks can't be copied by Velero, so databases and the ParkingClub lab now dump themselves into a `backup` emptyDir before every backup. Restore: `scripts/velero-restore-db.sh`.
+- Velero's node agent now also runs on cp1.
