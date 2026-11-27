@@ -1,0 +1,51 @@
+# Security hardening for the control plane + CIS report, safe to re-run.
+#   cd ansible && ansible-playbook security.yml                 # kube-bench before -> encryption + audit -> kube-bench after
+#   ansible-playbook security.yml -e snapshot=true              # also take VM snapshots first (slower, needs RAM-sized disk space)
+#   ansible-playbook security.yml --tags bench                  # just a fresh kube-bench report
+- name: Prepare report folder (and optional VM snapshots)
+  hosts: localhost
+  gather_facts: false
+  tags: [always]
+  tasks:
+    - name: Report time stamp
+      ansible.builtin.set_fact:
+        stamp: "{{ lookup('pipe', 'date +%Y-%m-%d_%H%M') }}"
+        report_dir: "{{ playbook_dir }}/../reports/kube-bench/{{ lookup('pipe', 'date +%Y-%m-%d_%H%M') }}"
+    - name: Snapshot all three VMs (only with -e snapshot=true)
+      ansible.builtin.command: "{{ playbook_dir }}/../scripts/lab.sh snapshot pre-security-{{ stamp }}"
+      when: snapshot | default(false) | bool
+      changed_when: true
+
+- name: kube-bench BEFORE hardening
+  hosts: k8s
+  become: true
+  tags: [bench]
+  roles:
+    - {role: kube_bench, phase: before}
+
+- name: Encryption at rest + API audit log (control plane)
+  hosts: control_plane
+  become: true
+  tags: [harden]
+  roles: [apiserver_hardening]
+
+- name: kube-bench AFTER hardening
+  hosts: k8s
+  become: true
+  tags: [harden]
+  roles:
+    - {role: kube_bench, phase: after}
+
+- name: Write the summary report
+  hosts: localhost
+  gather_facts: false
+  tags: [always]
+  tasks:
+    - name: Summarise kube-bench results
+      ansible.builtin.command: "python3 {{ playbook_dir }}/../scripts/kube-bench-summary.py {{ report_dir }}"
+      register: summary
+      changed_when: false
+      failed_when: false
+    - name: Where to read it
+      ansible.builtin.debug:
+        msg: "{{ summary.stdout_lines | default(['no report']) }}"

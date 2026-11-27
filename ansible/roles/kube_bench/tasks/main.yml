@@ -1,0 +1,45 @@
+# Install the latest kube-bench release and run the CIS benchmark that matches this cluster.
+- name: Find the latest kube-bench release (once)
+  ansible.builtin.uri:
+    url: https://api.github.com/repos/aquasecurity/kube-bench/releases/latest
+    return_content: true
+  register: kb_release
+  delegate_to: localhost
+  become: false
+  run_once: true
+
+- name: Pick the amd64 .deb
+  ansible.builtin.set_fact:
+    kb_deb: "{{ kb_release.json.assets | selectattr('name', 'match', '.*linux_amd64\\.deb$') | map(attribute='browser_download_url') | first }}"
+    kb_version: "{{ kb_release.json.tag_name }}"
+  run_once: true
+
+- name: Install kube-bench {{ kb_version }}
+  ansible.builtin.apt:
+    deb: "{{ kb_deb }}"
+  register: kb_install
+  retries: 3
+  delay: 5
+  until: kb_install is succeeded
+
+- name: Choose the newest CIS benchmark shipped with it
+  ansible.builtin.shell: ls -1 /etc/kube-bench/cfg | grep -E '^cis-[0-9.]+$' | sort -V | tail -1
+  register: kb_bench
+  changed_when: false
+
+- name: Run kube-bench ({{ phase }})
+  ansible.builtin.shell: |
+    set -o pipefail
+    t="{{ 'master,controlplane,etcd,node,policies' if inventory_hostname in groups['control_plane'] else 'node' }}"
+    kube-bench run --benchmark {{ kb_bench.stdout }} --targets "$t" --json > /tmp/kube-bench-{{ phase }}.json || true
+    kube-bench run --benchmark {{ kb_bench.stdout }} --targets "$t" > /tmp/kube-bench-{{ phase }}.txt || true
+  args:
+    executable: /bin/bash
+  changed_when: false
+
+- name: Copy the results to your desktop
+  ansible.builtin.fetch:
+    src: "/tmp/kube-bench-{{ phase }}.{{ item }}"
+    dest: "{{ hostvars['localhost'].report_dir }}/{{ phase }}/{{ inventory_hostname }}.{{ item }}"
+    flat: true
+  loop: [json, txt]

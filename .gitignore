@@ -12,3 +12,5 @@ secrets/
 __pycache__/
 .pytest_cache/
 *.db
+reports/
+homelab-keys/
