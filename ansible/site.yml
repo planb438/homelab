@@ -1,3 +1,11 @@
+- name: Wait for new VMs to finish booting (SSH up)
+  hosts: k8s
+  gather_facts: false
+  tasks:
+    - name: Wait up to 10 minutes for SSH
+      ansible.builtin.wait_for_connection:
+        timeout: 600
+
 - name: Prepare all nodes
   hosts: k8s
   become: true

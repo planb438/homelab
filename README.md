@@ -86,7 +86,8 @@ New app = add an `Ingress` with `ingressClassName: traefik` and a host, then add
 | App data (databases, PVCs) | VM disks | **only from a Velero backup** |
 | VMs + Kubernetes | libvirt, built by Terraform + Ansible | yes — you re-run them (they don't sync anything) |
 
-**Rebuild order:** `terraform apply` → `ansible-playbook site.yml` → `kubectl apply -f sealed-secrets-key.yaml`
+**Rebuild order:** `terraform apply` → `ansible-playbook site.yml` → restore the sealing key with
+`grep -vE '^\s+(resourceVersion|uid|creationTimestamp):' ~/homelab-keys/sealed-secrets-key.yaml | kubectl apply -f -`
 (from your password manager) → `bash scripts/bootstrap-argocd.sh` → wait for Synced →
 `velero restore create --from-backup <latest> --wait` (`docs/aws-velero.md`).
 
