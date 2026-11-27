@@ -9,8 +9,8 @@
   tasks:
     - name: Report time stamp
       ansible.builtin.set_fact:
-        stamp: "{{ lookup('pipe', 'date +%Y-%m-%d_%H%M') }}"
-        report_dir: "{{ playbook_dir }}/../reports/kube-bench/{{ lookup('pipe', 'date +%Y-%m-%d_%H%M') }}"
+        stamp: "{{ report_stamp | default(lookup('pipe', 'date +%Y-%m-%d_%H%M')) }}"
+        report_dir: "{{ playbook_dir }}/../reports/kube-bench/{{ report_stamp | default(lookup('pipe', 'date +%Y-%m-%d_%H%M')) }}"
     - name: Snapshot all three VMs (only with -e snapshot=true)
       ansible.builtin.command: "{{ playbook_dir }}/../scripts/lab.sh snapshot pre-security-{{ stamp }}"
       when: snapshot | default(false) | bool

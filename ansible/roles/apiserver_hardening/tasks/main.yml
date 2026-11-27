@@ -110,7 +110,7 @@
     id="$(crictl ps --name etcd -q | head -1)"
     crictl exec "$id" etcdctl --endpoints=https://127.0.0.1:2379 \
       --cacert=/etc/kubernetes/pki/etcd/ca.crt --cert=/etc/kubernetes/pki/etcd/healthcheck-client.crt \
-      --key=/etc/kubernetes/pki/etcd/healthcheck-client.key get "/registry/secrets/kube-system/$name" --print-value-only | head -c 30
+      --key=/etc/kubernetes/pki/etcd/healthcheck-client.key get "/registry/secrets/kube-system/$name" --print-value-only | head -c 26   # the prefix only; the rest is encrypted bytes
   args:
     executable: /bin/bash
   register: etcd_raw
