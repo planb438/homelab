@@ -1,0 +1,59 @@
+# Velero: nightly backup of every namespace + its volume data to an S3 bucket OFF the cluster.
+# cloudkanata-homelab-backups / ca-central-1 are filled in by scripts/setup-velero.sh
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: velero
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+  finalizers: [resources-finalizer.argocd.argoproj.io]
+spec:
+  project: default
+  sources:
+    - repoURL: https://vmware-tanzu.github.io/helm-charts
+      chart: velero
+      targetRevision: 12.2.5          # Velero 1.18; Renovate bumps this
+      helm:
+        valuesObject:
+          initContainers:
+            - name: velero-plugin-for-aws
+              image: velero/velero-plugin-for-aws:v1.14.4
+              volumeMounts: [{mountPath: /target, name: plugins}]
+          credentials:
+            useSecret: true
+            existingSecret: velero-aws-credentials   # SealedSecret in platform/velero
+          configuration:
+            backupStorageLocation:
+              - name: default
+                provider: aws
+                bucket: cloudkanata-homelab-backups
+                default: true
+                config: {region: ca-central-1}
+            defaultVolumesToFsBackup: true    # copy PVC data (local-path can't snapshot)
+          snapshotsEnabled: false
+          deployNodeAgent: true               # reads volume data on each node
+          resources:
+            requests: {cpu: 50m, memory: 128Mi}
+            limits: {memory: 512Mi}
+          nodeAgent:
+            resources:
+              requests: {cpu: 50m, memory: 128Mi}
+              limits: {memory: 768Mi}
+          schedules:
+            nightly:
+              schedule: "30 7 * * *"          # 07:30 UTC = 2:30 AM Toronto
+              useOwnerReferencesInBackup: false
+              template:
+                ttl: 720h                     # keep 30 days
+                excludedNamespaces: [velero, kube-node-lease]
+                snapshotVolumes: false
+    - repoURL: https://github.com/planb438/homelab.git
+      targetRevision: HEAD
+      path: platform/velero
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: velero
+  syncPolicy:
+    automated: {prune: true, selfHeal: true}
+    syncOptions: [CreateNamespace=true, ServerSideApply=true]
