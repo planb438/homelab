@@ -505,6 +505,20 @@ Two problems found and fixed on the way, both now handled by the playbook:
 
 After the rebuild: trust the new lab CA in your browser again, set up 2FA again on the lab sites (new databases), and save the new `~/homelab-keys/encryption-config.yaml`.
 
+### 6. Falco: runtime security
+
+Everything above stops bad things from getting **in**. Falco watches what running pods actually **do**. It runs on every node and reads each container's system calls through modern eBPF, a safe kernel hook with nothing to compile. When something matches a rule, it writes an alert:
+
+| You do this in a pod | Falco says |
+| --- | --- |
+| `kubectl exec -it … -- sh` | Terminal shell in container (Notice) |
+| `cat /etc/shadow` | Read sensitive file untrusted (Warning) |
+| write a file under `/etc` | File below /etc opened for writing (Error) |
+
+Watch alerts with `kubectl -n falco logs ds/falco -f`, or run `bash scripts/falco-test.sh`: it makes a throwaway pod, does those three things, prints the alerts and cleans up. Alerts stay in the pod logs for now; Falcosidekick can send them to Slack, email or Grafana later.
+
+**Client version:** "Admission policies stop bad workloads at the door; Falco is the security camera inside, and it tells me within seconds if someone opens a shell in a container."
+
 ## CI/CD: from a commit to a running pod
 
 **CI** (GitHub Actions) tests and builds. **CD** (Argo CD) deploys.

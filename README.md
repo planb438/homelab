@@ -175,6 +175,7 @@ and thanks to this repo, moving it there is a new `clusters/eks` folder, not a r
 ## Changelog
 | Date | Change |
 |---|---|
+| 2026-11-28 | Falco runtime security on all nodes (modern eBPF, JSON alerts, `scripts/falco-test.sh`) |
 | 2026-11-27 | Security pass (encryption at rest, audit log, kube-bench before/after); full rebuild from scratch tested (waits for VM boot and apt lock); Velero on AWS S3 with database dumps, restore tested; libvirt is the only build path (MicroK8s retired). Details: `docs/CHANGELOG.md` |
 | 2026-11-19 (pm) | Optional platform apps: kube-prometheus-stack 93.4.1 (Grafana at grafana.lab.local) and Velero 12.2.5 → S3 nightly; setup scripts; `docs/aws-velero.md`; rebuild/data guide; sealed-secrets Helm URL fixed |
 | 2026-11-19 | Civic Hub v0.1.0 (Ask Canada): Python collectors for IRCC, Canada.ca news, StatCan, Bank of Canada, open.canada.ca → PostgreSQL with change tracking + history; public page; Grafana; image CI to GHCR; `seal-civic-hub.sh` |

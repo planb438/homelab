@@ -105,6 +105,13 @@ clicked together by hand — so the same design can be rebuilt on a laptop, on E
 **Settings:** chart 12.2.5 (Velero 1.18) · AWS plugin 1.14.4 · file-system backup (node agent, kopia) because local-path can't snapshot · nightly 2:30 AM, kept 30 days · IAM user limited to one bucket · keys sealed · bucket `cloudkanata-homelab-backups` (ca-central-1) · databases dumped by pre-backup hooks (local-path disks are hostPath, which Velero skips) until the lab moves to NFS · node agent also on cp1.
 **AWS:** same; on EKS use IRSA instead of keys and EBS snapshots.
 
+## Falco  ·  `clusters/lab/apps/15-falco.yaml` (on since 2026-11-28)
+**What:** runtime security. A DaemonSet on all 3 nodes reads every container's system calls through **modern eBPF** and raises an alert when a rule matches: a shell opened in a pod, a write under `/etc`, a read of `/etc/shadow`, a package manager run in a container, an unexpected outbound connection.
+**Why:** Kyverno and Pod Security stop bad pods from *starting*; Falco catches bad behaviour in pods that are *already running* (a CKS exam domain). It is the camera; Kyverno is the door lock.
+**Settings:** chart 9.2.2 (Falco 0.45.2) · `driver.kind: modern_ebpf` (no kernel module to build) · JSON alerts, priority Notice and above · 128 Mi request / 512 Mi limit per node (chart default 512 Mi request is too much for cp1) · official rules pulled at start, no hourly auto-update (Git decides) · Falcosidekick off (turn on to send alerts to Slack, email or Grafana) · namespace `falco` labelled Pod Security `privileged`.
+**Use:** `kubectl -n falco logs ds/falco -f` · test: `bash scripts/falco-test.sh`.
+**AWS:** same chart on EKS EC2 nodes (not Fargate); or GuardDuty EKS Runtime Monitoring.
+
 ---
 
 ## Change log

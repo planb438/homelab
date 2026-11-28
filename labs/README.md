@@ -21,10 +21,10 @@ Run them all: `for t in labs/*/tests/test.sh; do echo "== $t"; bash "$t"; done`
 ## Next labs (planned, in this order)
 | Lab | From old repo | Notes |
 |---|---|---|
-| 07-encryption-at-rest | CKS 03, aws-k8s-lab 002 | Ansible: `EncryptionConfiguration` (aescbc→secretbox) on cp1; verify with `etcdctl` |
-| 08-audit-logging | CKS 09, aws-k8s-lab 001 | Ansible: audit policy + apiserver flags; ship logs later |
-| 09-falco-runtime | CKS 10 | Helm via Argo CD; ~300 MB RAM — run on demand |
-| 10-backups | minio-velero-gitops, aws-k8s-lab disaster-recovery | Velero + MinIO **without** cluster-admin creds in Git; copy off the laptop; etcd snapshot CronJob |
+| 07-encryption-at-rest | CKS 03, aws-k8s-lab 002 | **Done 2026-11-27** in `ansible/security.yml` (secretbox) |
+| 08-audit-logging | CKS 09, aws-k8s-lab 001 | **Done 2026-11-27** in `ansible/security.yml`; ship logs later |
+| 09-falco-runtime | CKS 10 | **Done 2026-11-28** as platform app `clusters/lab/apps/15-falco.yaml`; test with `scripts/falco-test.sh` |
+| 10-backups | minio-velero-gitops, aws-k8s-lab disaster-recovery | **Done 2026-11-27**: Velero to AWS S3 (no MinIO); etcd snapshot CronJob still to do |
 | 11-signed-images | CKS 08, 11 SBOM | cosign sign + Kyverno `verifyImages`; Syft/Grype in CI |
 | 12-runtime-sandbox | mock tasks 08/09 | gVisor RuntimeClass, AppArmor profiles |
 | 13-monitoring | prometheus-grafana-gitops | kube-prometheus-stack in prod only (RAM) |

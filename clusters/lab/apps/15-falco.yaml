@@ -1,0 +1,49 @@
+# Falco: runtime security. Watches every container's system calls on all 3 nodes (modern eBPF, no kernel module)
+# and alerts on things like a shell opened in a pod, a write under /etc, or a read of /etc/shadow.
+# Alerts go to the pod logs as JSON:  kubectl -n falco logs ds/falco -f | grep -v '"priority":"Debug"'
+# Test it:  bash scripts/falco-test.sh
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: falco
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+  finalizers: [resources-finalizer.argocd.argoproj.io]
+spec:
+  project: default
+  source:
+    repoURL: https://falcosecurity.github.io/charts
+    chart: falco
+    targetRevision: 9.2.2             # Falco 0.45.2; Renovate bumps this
+    helm:
+      valuesObject:
+        driver:
+          kind: modern_ebpf           # built into the Falco binary; works on Ubuntu 24.04 kernels, nothing to compile
+        collectors:
+          containerEngine:
+            enabled: true             # adds pod / namespace / image names to each alert
+        tty: true                     # alerts show up in the logs right away
+        falco:
+          json_output: true
+          json_include_output_property: true
+          priority: notice            # Notice and above; Debug/Info rules are skipped to save CPU
+        resources:                    # chart default asks 512 Mi per node: too much for cp1 (3 GB)
+          requests: {cpu: 50m, memory: 128Mi}
+          limits: {memory: 512Mi}
+        falcoctl:
+          artifact:
+            install: {enabled: true}  # pulls the official rules at start
+            follow: {enabled: false}  # no hourly rule updates: Git decides when rules change
+        falcosidekick:
+          enabled: false              # turn on later to send alerts to Slack/email/Grafana
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: falco
+  syncPolicy:
+    automated: {prune: true, selfHeal: true}
+    syncOptions: [CreateNamespace=true, ServerSideApply=true]
+    managedNamespaceMetadata:
+      labels:
+        pod-security.kubernetes.io/enforce: privileged   # Falco needs host access to read system calls
+        pod-security.kubernetes.io/warn: privileged

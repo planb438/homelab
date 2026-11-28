@@ -26,3 +26,6 @@ Newest first. One line per change that affects what runs or how to use it. Updat
 
 ## 2026-11-27 — docs
 - Lab guide: database-dump step, Velero test results, full-rebuild walkthrough. README: status, rebuild order, keys to keep. MicroK8s marked legacy: libvirt + Terraform + Ansible/kubeadm is the only build path.
+
+## 2026-11-28 — Falco
+- Falco 0.45.2 (chart 9.2.2) on all 3 nodes via Argo CD (`clusters/lab/apps/15-falco.yaml`): modern eBPF, JSON alerts at Notice and above, 128 Mi per node. Test: `scripts/falco-test.sh`.
